@@ -18,8 +18,8 @@ EQUIPEMENTS_FILE = os.path.join(DATA_DIR, "equipements.xlsx")
 OBSERVATIONS_FILE = os.path.join(DATA_DIR, "observations.csv")
 
 # Colonnes attendues
-EQUIPEMENTS_COLS = ["id_equipement", "nom_equipement", "departement"]
-OBSERVATIONS_COLS = ["id_equipement", "date", "observation", "recommandation", "analyste"]
+EQUIPEMENTS_COLS = ["id_equipement", "departement"]
+OBSERVATIONS_COLS = ["id_equipement", "date", "observation", "recommandation","Travaux effectués & Notes", "analyste"]
 
 
 # =============================================================================
@@ -33,15 +33,8 @@ def initialiser_fichiers():
     # Initialiser équipements avec des données exemples
     if not os.path.exists(EQUIPEMENTS_FILE):
         equipements_init = pd.DataFrame({
-            "id_equipement": ["EQ001", "EQ002", "EQ003", "EQ004", "EQ005"],
-            "nom_equipement": [
-                "Compresseur A1",
-                "Pompe hydraulique B2",
-                "Ventilateur C3",
-                "Convoyeur D4",
-                "Broyeur E5"
-            ],
-            "departement": ["Production", "Production", "Logistique", "Logistique", "Production"]
+            "id_equipement": ["244-3P-1", "262-1P-4", "32-1H-3", "25-24P", "44-43P"],
+            "departement": ["Chargement", "CHAUFFERIE", "CHLORE 1", "ELECTROLYSE 1", "ÉVAPO 1"]
         })
         equipements_init.to_excel(EQUIPEMENTS_FILE, index=False)
 
@@ -79,7 +72,7 @@ def charger_observations():
         return pd.DataFrame(columns=OBSERVATIONS_COLS)
 
 
-def sauvegarder_observation(id_equipement, date, observation, recommandation, analyste):
+def sauvegarder_observation(id_equipement, date, observation, recommandation,trav_notes ,analyste):
     """
     Enregistre une nouvelle observation dans le fichier CSV
 
@@ -88,6 +81,7 @@ def sauvegarder_observation(id_equipement, date, observation, recommandation, an
         date (datetime): Date de l'observation
         observation (str): Texte de l'observation
         recommandation (str): Texte de la recommandation
+        trav_notes (str): Texte de la travaux&Notes
         analyste (str): Nom de l'analyste
 
     Returns:
@@ -103,6 +97,7 @@ def sauvegarder_observation(id_equipement, date, observation, recommandation, an
             "date": date.strftime("%Y-%m-%d"),
             "observation": observation,
             "recommandation": recommandation,
+            "Travaux effectués & Notes": trav_notes,
             "analyste": analyste
         }])
 
@@ -138,10 +133,10 @@ def exporter_excel(df_equipements, df_observations):
     colonnes_export = [
         "departement",
         "id_equipement",
-        "nom_equipement",
         "date",
         "observation",
         "recommandation",
+        "Travaux effectués & Notes",
         "analyste"
     ]
 
@@ -150,10 +145,10 @@ def exporter_excel(df_equipements, df_observations):
     df_export.columns = [
         "Département",
         "ID Équipement",
-        "Équipement",
         "Date",
         "Observation",
         "Recommandation",
+        "Travaux effectués & Notes",
         "Analyste"
     ]
 
@@ -231,7 +226,7 @@ def main():
             ]
 
         equipement_options = {
-            f"{row['nom_equipement']} ({row['id_equipement']})": row["id_equipement"]
+            f"{row['id_equipement']}": row["id_equipement"]
             for _, row in equipements_filtres.iterrows()
         }
 
@@ -251,7 +246,7 @@ def main():
         )
 
     # Champs de saisie
-    col_obs, col_reco = st.columns(2)
+    col_obs, col_reco, col_trav = st.columns(3)
 
     with col_obs:
         observation = st.text_area(
@@ -267,6 +262,13 @@ def main():
             height=150,
             placeholder="Actions à entreprendre, pièces à commander...",
             key="reco_input"
+        )
+    with col_trav:
+        trav_notes = st.text_area(
+            "Travaux effectués & Notes",
+            height=150,
+            placeholder="Les travaux que vous avez effectuées et vos notes",
+            key="trav_input"
         )
 
     # Nom analyste
@@ -296,6 +298,7 @@ def main():
                     date_observation,
                     observation.strip(),
                     recommandation.strip(),
+                    trav_notes.strip(),
                     analyste.strip()
             ):
                 st.success("✅ Observation enregistrée avec succès")
@@ -350,7 +353,7 @@ def main():
 
         # Fusion avec équipements pour affichage
         df_display = df_filtered.merge(
-            df_equipements[["id_equipement", "nom_equipement", "departement"]],
+            df_equipements[["id_equipement", "departement"]],
             on="id_equipement",
             how="left"
         )
@@ -359,23 +362,26 @@ def main():
         df_display = df_display.sort_values("date", ascending=False)
 
         # Reformatage des dates
-        df_display["date"] = pd.to_datetime(df_display["date"]).dt.strftime("%Y-%m-%d")
+        df_display["date"] = (
+            pd.to_datetime(df_display["date"], format="mixed", errors="coerce")
+            .dt.strftime("%Y-%m-%d")
+        )
 
         # Affichage
         st.dataframe(
             df_display[[
-                "departement", "nom_equipement", "id_equipement",
-                "date", "observation", "recommandation", "analyste"
+                "departement", "id_equipement",
+                "date", "observation", "recommandation","Travaux effectués & Notes", "analyste"
             ]],
             use_container_width=True,
             hide_index=True,
             column_config={
                 "departement": "Département",
-                "nom_equipement": "Équipement",
                 "id_equipement": "ID",
                 "date": "Date",
                 "observation": st.column_config.TextColumn("Observation", width="large"),
                 "recommandation": st.column_config.TextColumn("Recommandation", width="large"),
+                "trav_notes": st.column_config.TextColumn("Travaux effectués & Notes", width="large"),
                 "analyste": "Analyste"
             }
         )
