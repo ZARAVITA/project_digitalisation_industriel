@@ -182,11 +182,11 @@ Fichier principal contenant :
 #### `data/equipements.xlsx`
 Structure :
 ```
-| id_equipement | nom_equipement           | departement  |
-|---------------|--------------------------|--------------|
-| EQ001         | Compresseur A1           | Production   |
-| EQ002         | Pompe hydraulique B2     | Production   |
-| EQ003         | Ventilateur C3           | Logistique   |
+| id_equipement | departement  |
+|---------------|--------------|
+| EQ001         | Production   |
+| EQ002         | Production   |
+| EQ003         | Logistique   |
 ```
 
 #### `data/observations.csv`
@@ -244,7 +244,6 @@ OBSERVATIONS_FILE = os.path.join(DATA_DIR, "observations.csv")
 #### Table : Équipements
 ```sql
 id_equipement   VARCHAR(10)  PRIMARY KEY
-nom_equipement  VARCHAR(100) NOT NULL
 departement     VARCHAR(50)  NOT NULL
 ```
 
@@ -254,6 +253,7 @@ id_equipement   VARCHAR(10)  FOREIGN KEY -> equipements.id_equipement
 date            DATE         NOT NULL
 observation     TEXT         NOT NULL
 recommandation  TEXT
+Trav_notes      TEXT
 analyste        VARCHAR(50)  NOT NULL
 ```
 
@@ -355,8 +355,8 @@ pip install --upgrade streamlit pandas openpyxl
 ```
 
 #### Erreur "Colonnes manquantes"
-- Vérifier que `equipements.xlsx` contient : `id_equipement`, `nom_equipement`, `departement`
-- Vérifier que `observations.csv` contient : `id_equipement`, `date`, `observation`, `recommandation`, `analyste`
+- Vérifier que `equipements.xlsx` contient : `id_equipement`, `departement`
+- Vérifier que `observations.csv` contient : `id_equipement`, `date`, `observation`, `recommandation`, 'Travaux effectués et Notes", `analyste`
 
 #### Les données ne se sauvegardent pas
 - Vérifier les permissions d'écriture dans le dossier `data/`
@@ -384,16 +384,14 @@ streamlit run app.py --logger.level=debug
 ## 📞 Contact
 
 Pour toute question ou suggestion :
-- **Email** : support-maintenance@entreprise.com
-- **Équipe** : IT - Solutions Internes
-- **Documentation** : [Wiki interne](http://wiki.entreprise.com/maintenance-app)
-
+- **Email** : zaravitamds18@gmail.com
+- **Partenaire** : ANDRIAMASINADY Angelico
+- **Documentation** : …
 ---
 
 ## 📄 Licence
 
-Usage interne uniquement - Propriété de [Nom de l'entreprise]
-
+Usage interne uniquement - Propriété de Partenariat de M. Angelico et M. ZARAVITA
 © 2025 - Tous droits réservés
 
 ---
