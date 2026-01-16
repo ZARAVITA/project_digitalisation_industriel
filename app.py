@@ -71,6 +71,15 @@ def charger_observations():
         st.error(f"❌ Erreur lors du chargement des observations : {e}")
         return pd.DataFrame(columns=OBSERVATIONS_COLS)
 
+def reset_saisie():
+    for key in [
+        "obs_input",
+        "reco_input",
+        "trav_input",
+        "analyste_input"
+    ]:
+        if key in st.session_state:
+            st.session_state[key] = ""
 
 def sauvegarder_observation(id_equipement, date, observation, recommandation,trav_notes ,analyste):
     """
@@ -216,7 +225,8 @@ def main():
         departement_selectionne = st.selectbox(
             "Département",
             options=departements,
-            key="dept_select"
+            key="dept_select",
+            on_change=reset_saisie
         )
 
     with col2:
@@ -233,7 +243,8 @@ def main():
         equipement_selectionne_label = st.selectbox(
             "Équipement",
             options=list(equipement_options.keys()),
-            key="equip_select"
+            key="equip_select",
+            on_change=reset_saisie
         )
         equipement_selectionne_id = equipement_options[equipement_selectionne_label]
 
@@ -348,12 +359,13 @@ def main():
         with col_filter3:
             date_min_data = df_obs["date"].min()
             date_max_data = df_obs["date"].max()
-
+            min_date = date_min_data.date()
+            max_date = date_max_data.date()
             date_filter = st.date_input(
                 "Filtrer par date",
                 value=(date_min_data.date(), date_max_data.date()),
-                min_value=pd.to_datetime("2020-01-01").date(),  # borne UX large
-                max_value=pd.to_datetime("2030-12-31").date()
+                min_value=min_date,  # borne UX large
+                max_value=max_date
             )
         # Application des filtres
         df_filtered = df_obs.copy()
