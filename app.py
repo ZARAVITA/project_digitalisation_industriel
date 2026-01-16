@@ -215,7 +215,7 @@ def main():
     # SECTION SAISIE
     # =============================================================================
 
-    st.header("📝 Nouvelle Observation")
+    st.header("📝 Nouvelle observation")
 
     col1, col2, col3 = st.columns([2, 2, 1])
 
