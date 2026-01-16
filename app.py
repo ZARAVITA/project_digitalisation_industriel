@@ -315,8 +315,14 @@ def main():
     if df_observations.empty:
         st.info("ℹ️ Aucune observation enregistrée pour le moment")
     else:
+        df_obs = df_observations.copy()
+        df_obs["date"] = pd.to_datetime(
+            df_obs["date"],
+            format="mixed",
+            errors="coerce"
+        )
         # Filtres
-        col_filter1, col_filter2 = st.columns(2)
+        col_filter1, col_filter2, col_filter3 = st.columns(3)
 
         with col_filter1:
             dept_filter = st.multiselect(
@@ -339,8 +345,19 @@ def main():
                 default=None
             )
 
+        with col_filter3:
+            date_min_data = df_obs["date"].min()
+            date_max_data = df_obs["date"].max()
+
+            date_filter = st.date_input(
+                "Filtrer par date",
+                value=(date_min_data.date(), date_max_data.date()),
+                min_value=pd.to_datetime("2020-01-01").date(),  # borne UX large
+                max_value=pd.to_datetime("2030-12-31").date()
+            )
         # Application des filtres
-        df_filtered = df_observations.copy()
+        df_filtered = df_obs.copy()
+
 
         if dept_filter:
             ids_dept = df_equipements[
@@ -350,6 +367,12 @@ def main():
 
         if equip_filter:
             df_filtered = df_filtered[df_filtered["id_equipement"].isin(equip_filter)]
+        if len(date_filter) == 2:
+            start_date, end_date = date_filter
+            df_filtered = df_filtered[
+                (df_filtered["date"].dt.date >= start_date) &
+                (df_filtered["date"].dt.date <= end_date)
+                ]
 
         # Fusion avec équipements pour affichage
         df_display = df_filtered.merge(
