@@ -1,414 +1,249 @@
-# 🔧 MVP Gestion des Rapports de Maintenance
+# 🔧 Application de Gestion des Rapports de Maintenance
 
-Application web interne Streamlit pour digitaliser les rapports mensuels de maintenance des équipements industriels.
+Application professionnelle Streamlit pour le suivi des équipements industriels et de leurs observations de maintenance.
 
-[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)](https://streamlit.io/)
-[![License](https://img.shields.io/badge/License-Internal-green.svg)]()
+## 📁 Structure du projet
 
----
-
-## 📋 Table des matières
-
-- [Vue d'ensemble](#-vue-densemble)
-- [Fonctionnalités](#-fonctionnalités)
-- [Installation](#-installation)
-- [Utilisation](#-utilisation)
-- [Structure du projet](#-structure-du-projet)
-- [Configuration](#-configuration)
-- [Architecture technique](#-architecture-technique)
-- [Évolutions futures](#-évolutions-futures)
-- [Contribution](#-contribution)
-- [Support](#-support)
-
----
-
-## 🎯 Vue d'ensemble
-
-### Contexte
-Cette application remplace un processus manuel basé sur des fichiers Excel mensuels. Elle permet aux analystes techniques de :
-- **Saisir** des observations et recommandations sur les équipements
-- **Consulter** l'historique complet des interventions
-- **Exporter** des rapports Excel professionnels
-
-### Public cible
-- Analystes techniques
-- Responsables de maintenance
-- Équipes d'inspection
-
-### Périmètre MVP
-- 20 équipements maximum
-- Stockage fichier (CSV/Excel)
-- Déploiement interne uniquement
-
----
-
-## ✨ Fonctionnalités
-
-### 1. Saisie des observations
-- ✅ Sélection par département puis équipement (cascade)
-- ✅ Champ date avec calendrier intégré
-- ✅ Zones de texte pour observation et recommandation
-- ✅ Identification de l'analyste
-- ✅ Validation des champs obligatoires
-- ✅ Sauvegarde persistante en CSV
-
-### 2. Consultation de l'historique
-- ✅ Tableau interactif de toutes les observations
-- ✅ Filtres dynamiques par département
-- ✅ Filtres dynamiques par équipement
-- ✅ Tri automatique par date (plus récent en premier)
-- ✅ Compteur d'observations affichées
-
-### 3. Export Excel
-- ✅ Génération d'un fichier Excel complet
-- ✅ Fusion automatique des données équipements + observations
-- ✅ Colonnes formatées en français
-- ✅ Largeur des colonnes auto-ajustée
-- ✅ Nom de fichier horodaté
-- ✅ Téléchargement direct depuis l'interface
-
-### 4. Gestion des données
-- ✅ Chargement automatique depuis `equipements.xlsx`
-- ✅ Données d'exemple créées au premier lancement
-- ✅ Persistance dans `observations.csv`
-- ✅ Validation de la structure des fichiers
-
----
+```
+maintenance-app/
+│
+├── app.py                          # Point d'entrée principal
+├── requirements.txt                # Dépendances Python
+│
+├── data/                           # Répertoire données (créé automatiquement)
+│   ├── equipements.xlsx            # Référentiel équipements
+│   └── observations.csv            # Historique observations
+│
+├── data/
+│   └── data_manager.py             # Couche d'accès données
+│
+└── ui/                             # Modules d'interface
+    ├── equipements.py              # Onglet Équipements
+    ├── observations.py             # Onglet Observations
+    ├── telechargements.py          # Onglet Téléchargements
+    └── suppressions.py             # Onglet Suppressions
+```
 
 ## 🚀 Installation
 
 ### Prérequis
-- Python 3.8 ou supérieur
-- pip (gestionnaire de packages Python)
+- Python 3.8+
+- pip
 
-### Étapes d'installation
+### Étapes
 
-#### 1. Cloner ou télécharger le projet
+1. **Cloner ou créer le projet**
 ```bash
-git clone <url-du-repo>
-cd rapport-maintenance-mvp
+mkdir maintenance-app
+cd maintenance-app
 ```
 
-#### 2. Créer un environnement virtuel (recommandé)
+2. **Créer l'environnement virtuel (recommandé)**
 ```bash
-# Windows
 python -m venv venv
-venv\Scripts\activate
 
-# Mac/Linux
-python3 -m venv venv
+# Activation
+# Windows
+venv\Scripts\activate
+# Linux/Mac
 source venv/bin/activate
 ```
 
-#### 3. Installer les dépendances
-```bash
-pip install streamlit pandas openpyxl
-```
-
-Ou via un fichier `requirements.txt` :
+3. **Installer les dépendances**
 ```bash
 pip install -r requirements.txt
 ```
 
-**Contenu du `requirements.txt` :**
+4. **Créer la structure des dossiers**
+```bash
+mkdir data
+mkdir data
+mkdir ui
 ```
-streamlit>=1.28.0
-pandas>=2.0.0
-openpyxl>=3.1.0
-```
 
----
+5. **Copier les fichiers Python** dans leur emplacement respectif
 
-## 💻 Utilisation
-
-### Démarrage de l'application
+## ▶️ Lancement
 
 ```bash
 streamlit run app.py
 ```
 
-L'application s'ouvre automatiquement dans votre navigateur par défaut sur :
-```
-http://localhost:8501
-```
+L'application s'ouvrira automatiquement dans votre navigateur à l'adresse : `http://localhost:8501`
 
-### Workflow typique
+## 📖 Guide d'utilisation
 
-#### **Étape 1 : Saisir une observation**
-1. Sélectionner le **département** concerné
-2. Choisir l'**équipement** dans la liste filtrée
-3. Sélectionner la **date** d'observation
-4. Rédiger l'**observation** (obligatoire)
-5. Rédiger la **recommandation** (optionnel mais conseillé)
-6. Indiquer le nom de l'**analyste** (obligatoire)
-7. Cliquer sur **Enregistrer**
+### 1️⃣ Onglet Équipements
 
-#### **Étape 2 : Consulter l'historique**
-1. Utiliser les filtres pour cibler un département ou équipement
-2. Consulter le tableau interactif
-3. Vérifier le compteur d'observations affichées
+**Objectif** : Visualiser le référentiel des équipements
 
-#### **Étape 3 : Exporter en Excel**
-1. Descendre jusqu'à la section "Export Excel"
-2. Cliquer sur **Télécharger Excel**
-3. Le fichier est généré avec horodatage : `rapport_maintenance_YYYYMMDD_HHMMSS.xlsx`
+**Fonctionnalités** :
+- Tableau de tous les équipements
+- Filtrage par département(s)
+- Export Excel (filtré ou complet)
+- Statistiques par département
 
----
+**Cas d'usage** :
+- Consulter la liste des équipements d'un département
+- Exporter le référentiel pour un rapport
+- Vérifier le nombre d'équipements par zone
 
-## 📁 Structure du projet
+### 2️⃣ Onglet Observations
 
-```
-rapport-maintenance-mvp/
-│
-├── app.py                      # Application Streamlit principale
-├── README.md                   # Documentation (ce fichier)
-├── requirements.txt            # Dépendances Python
-│
-└── data/                       # Répertoire de données (créé automatiquement)
-    ├── equipements.xlsx        # Base des équipements
-    └── observations.csv        # Historique des observations
-```
+**Objectif** : Saisir et consulter l'historique
 
-### Description des fichiers
+**Bloc 1 - Nouvelle observation** :
+1. Sélectionner le département
+2. Choisir l'équipement (liste filtrée)
+3. Définir la date
+4. Remplir les champs (observation requise)
+5. Indiquer le nom de l'analyste (requis)
+6. Cliquer sur "Enregistrer"
 
-#### `app.py`
-Fichier principal contenant :
-- Configuration Streamlit
-- Fonctions de chargement/sauvegarde des données
-- Interface utilisateur
-- Logique métier
+**Bloc 2 - Historique** :
+- Affichage par défaut : 5 observations les plus récentes
+- Filtres disponibles :
+  - Département(s)
+  - Équipement(s)
+  - Période (date début/fin)
+- Tableau complet avec tous les détails
 
-#### `data/equipements.xlsx`
-Structure :
-```
-| id_equipement | departement  |
-|---------------|--------------|
-| EQ001         | Production   |
-| EQ002         | Production   |
-| EQ003         | Logistique   |
-```
+### 3️⃣ Onglet Téléchargements
 
-#### `data/observations.csv`
-Structure :
-```
-id_equipement,date,observation,recommandation,analyste
-EQ001,2025-01-12,"Fuite détectée","Remplacer joint",Jean Dupont
-```
+**Objectif** : Générer des exports Excel filtrés
 
----
+**Rapport d'observations** :
+1. Appliquer les filtres souhaités
+2. Vérifier le nombre d'observations sélectionnées
+3. Cliquer sur "Télécharger"
+4. Le fichier contient : département, ID, date, observation, recommandation, travaux, analyste
 
-## ⚙️ Configuration
+**Liste des équipements** :
+1. Filtrer par département si besoin
+2. Télécharger la liste
 
-### Personnaliser les équipements
+**Nom des fichiers** : Horodatage automatique pour éviter les écrasements
 
-#### Méthode 1 : Modifier le fichier Excel
-1. Ouvrir `data/equipements.xlsx`
-2. Respecter la structure des colonnes :
-   - `id_equipement` : Identifiant unique (ex: EQ001)
-   - `nom_equipement` : Nom descriptif
-   - `departement` : Département rattaché
-3. Sauvegarder et relancer l'application
+### 4️⃣ Onglet Suppressions
 
-#### Méthode 2 : Modifier le code d'initialisation
-Dans `app.py`, section `initialiser_fichiers()`, modifier :
-```python
-equipements_init = pd.DataFrame({
-    "id_equipement": ["EQ001", "EQ002", ...],
-    "nom_equipement": ["Nom 1", "Nom 2", ...],
-    "departement": ["Dept 1", "Dept 2", ...]
-})
-```
+**⚠️ Zone critique - Utilisation contrôlée**
 
-### Modifier les chemins de fichiers
+**Supprimer une observation** :
+1. Sélectionner l'équipement
+2. Indiquer la date exacte
+3. Cliquer sur "Supprimer"
+4. Confirmer l'action
 
-Dans `app.py`, section CONFIGURATION :
-```python
-DATA_DIR = "data"  # Modifier si nécessaire
-EQUIPEMENTS_FILE = os.path.join(DATA_DIR, "equipements.xlsx")
-OBSERVATIONS_FILE = os.path.join(DATA_DIR, "observations.csv")
-```
+**Supprimer un équipement** :
+1. Sélectionner l'équipement
+2. ⚠️ ATTENTION : Toutes les observations associées seront supprimées
+3. Confirmer la suppression définitive
 
----
+**Bonnes pratiques** :
+- Exportez vos données avant toute suppression importante
+- Vérifiez toujours les informations affichées
+- Les suppressions sont irréversibles
 
 ## 🏗️ Architecture technique
 
-### Stack technologique
-- **Frontend** : Streamlit (interface web Python)
-- **Traitement de données** : Pandas
-- **Stockage** : Fichiers CSV/Excel
-- **Export** : openpyxl
+### Séparation des responsabilités
 
-### Modèle de données
+**`app.py`** : Point d'entrée, navigation
+**`data/data_manager.py`** : Gestion données (CRUD)
+**`ui/*.py`** : Modules d'interface par onglet
 
-#### Table : Équipements
-```sql
-id_equipement   VARCHAR(10)  PRIMARY KEY
-departement     VARCHAR(50)  NOT NULL
+### Choix techniques
+
+- **Stockage** : Excel + CSV (migration Supabase prévue)
+- **Framework** : Streamlit (UX rapide)
+- **Données** : Pandas (manipulation)
+
+### Points de migration Supabase
+
+Les fonctions dans `data_manager.py` sont conçues pour être facilement migrées :
+
+```python
+# Actuellement : CSV/Excel
+def charger_observations():
+    return pd.read_csv(OBSERVATIONS_FILE)
+
+# Future migration :
+def charger_observations():
+    return supabase.table('observations').select('*').execute()
 ```
 
-#### Table : Observations
-```sql
-id_equipement   VARCHAR(10)  FOREIGN KEY -> equipements.id_equipement
-date            DATE         NOT NULL
-observation     TEXT         NOT NULL
-recommandation  TEXT
-Trav_notes      TEXT
-analyste        VARCHAR(50)  NOT NULL
+**Fonctions à migrer** :
+- `charger_equipements()`
+- `charger_observations()`
+- `sauvegarder_observation()`
+- `supprimer_observation()`
+- `supprimer_equipement()`
+
+## 🎨 Conventions de code
+
+### Style
+- Noms de fonctions : `snake_case`
+- Commentaires : Français (contexte métier)
+- Docstrings : Format Google
+
+### Organisation
+- Un onglet = un fichier dans `ui/`
+- Logique métier dans `data_manager.py`
+- UI pure dans les modules `ui/`
+
+## 🔧 Maintenance
+
+### Ajouter un équipement manuellement
+
+Éditer `data/equipements.xlsx` :
+```
+id_equipement    | departement
+-----------------+------------------
+NOUVEAU-ID-123   | NOM_DEPARTEMENT
 ```
 
-### Fonctions principales
+### Sauvegarder les données
 
-#### `initialiser_fichiers()`
-Crée les fichiers de données avec structure initiale si absents.
+Copiez régulièrement :
+```bash
+cp data/equipements.xlsx backups/equipements_YYYYMMDD.xlsx
+cp data/observations.csv backups/observations_YYYYMMDD.csv
+```
 
-#### `charger_equipements() -> DataFrame`
-Charge et valide les équipements depuis Excel.
+### Réinitialiser les données
 
-#### `charger_observations() -> DataFrame`
-Charge et valide les observations depuis CSV.
+Supprimez le dossier `data/` et relancez l'application. Les fichiers seront recréés avec les données exemples.
 
-#### `sauvegarder_observation(...) -> bool`
-Enregistre une nouvelle observation dans le CSV.
+## 🐛 Dépannage
 
-#### `exporter_excel(...) -> BytesIO`
-Génère un fichier Excel avec fusion des données.
+**Erreur "Colonnes manquantes"**
+- Vérifiez la structure des fichiers Excel/CSV
+- Les colonnes doivent correspondre exactement aux schémas définis
 
-### Gestion des erreurs
-- Validation des colonnes requises
-- Messages d'erreur explicites dans l'interface
-- Try/except sur toutes les opérations I/O
-- Valeurs par défaut pour DataFrames vides
+**L'application ne démarre pas**
+- Vérifiez que toutes les dépendances sont installées
+- Assurez-vous que la structure des dossiers est correcte
 
----
+**Données non sauvegardées**
+- Vérifiez les permissions d'écriture dans le dossier `data/`
 
-## 🔮 Évolutions futures
+## 📝 Évolutions futures
 
-### Phase 2 : Améliorations immédiates
-- [ ] Authentification basique (streamlit-authenticator)
-- [ ] Pièces jointes (photos, PDF)
-- [ ] Recherche textuelle dans observations
-- [ ] Statistiques par département
-
-### Phase 3 : Base de données
-- [ ] Migration vers SQLite
-- [ ] Gestion transactionnelle
-- [ ] Performances optimisées (>1000 observations)
+- [ ] Migration vers Supabase (base de données)
+- [ ] Authentification utilisateurs
 - [ ] Historique des modifications
+- [ ] Pièces jointes (photos)
+- [ ] Notifications automatiques
+- [ ] Tableau de bord analytique
 
-### Phase 4 : Fonctionnalités avancées
-- [ ] Notifications par email
-- [ ] Planification des maintenances
-- [ ] Tableau de bord avec graphiques (Plotly)
-- [ ] Export PDF avec mise en page
-- [ ] API REST pour intégration GMAO
+## 👥 Support
 
-### Phase 5 : Enterprise
-- [ ] PostgreSQL multi-utilisateurs
-- [ ] Rôles et permissions (admin/analyste/lecteur)
-- [ ] Audit trail complet
-- [ ] Intégration LDAP/Active Directory
-- [ ] Déploiement Docker
+Pour toute question ou problème :
+1. Vérifiez ce README
+2. Consultez les messages d'erreur dans la console
+3. Contactez l'équipe technique
 
 ---
 
-## 🤝 Contribution
-
-### Standards de code
-- **Formatage** : Respecter PEP 8
-- **Docstrings** : Format Google Style
-- **Type hints** : Encouragés pour les fonctions principales
-- **Commentaires** : En français pour ce projet
-
-### Workflow Git
-```bash
-# Créer une branche pour une nouvelle fonctionnalité
-git checkout -b feature/ma-fonctionnalite
-
-# Commiter avec des messages explicites
-git commit -m "feat: ajout recherche textuelle"
-
-# Pousser et créer une pull request
-git push origin feature/ma-fonctionnalite
-```
-
-### Conventions de commit
-- `feat:` nouvelle fonctionnalité
-- `fix:` correction de bug
-- `docs:` documentation uniquement
-- `refactor:` refactorisation sans changement fonctionnel
-- `test:` ajout de tests
-
----
-
-## 🐛 Support et dépannage
-
-### Problèmes courants
-
-#### L'application ne démarre pas
-```bash
-# Vérifier la version de Python
-python --version  # Doit être >= 3.8
-
-# Réinstaller les dépendances
-pip install --upgrade streamlit pandas openpyxl
-```
-
-#### Erreur "Colonnes manquantes"
-- Vérifier que `equipements.xlsx` contient : `id_equipement`, `departement`
-- Vérifier que `observations.csv` contient : `id_equipement`, `date`, `observation`, `recommandation`, 'Travaux effectués et Notes", `analyste`
-
-#### Les données ne se sauvegardent pas
-- Vérifier les permissions d'écriture dans le dossier `data/`
-- Consulter les logs dans le terminal Streamlit
-
-#### Export Excel ne fonctionne pas
-```bash
-# Réinstaller openpyxl
-pip install --force-reinstall openpyxl
-```
-
-### Logs et débogage
-
-Les messages d'erreur s'affichent :
-1. Dans l'interface Streamlit (messages rouges)
-2. Dans le terminal (logs détaillés)
-
-Pour activer le mode debug :
-```bash
-streamlit run app.py --logger.level=debug
-```
-
----
-
-## 📞 Contact
-
-Pour toute question ou suggestion :
-- **Email** : zaravitamds18@gmail.com
-- **Partenaire** : ANDRIAMASINADY Angelico
-- **Documentation** : …
----
-
-## 📄 Licence
-
-Usage interne uniquement - Propriété de Partenariat de M. Angelico et M. ZARAVITA
-© 2025 - Tous droits réservés
-
----
-
-## 📚 Ressources
-
-### Documentation officielle
-- [Streamlit](https://docs.streamlit.io/)
-- [Pandas](https://pandas.pydata.org/docs/)
-- [openpyxl](https://openpyxl.readthedocs.io/)
-
-### Tutoriels recommandés
-- [Streamlit for Data Apps](https://streamlit.io/gallery)
-- [Pandas Cheat Sheet](https://pandas.pydata.org/Pandas_Cheat_Sheet.pdf)
-
----
-
-**Version** : 1.0.0 (MVP)  
-**Dernière mise à jour** : Janvier 2025  
-**Statut** : ✅ Production-ready pour usage interne
+**Version** : 2.0 (Refactorisée)  
+**Dernière mise à jour** : Janvier 2025
