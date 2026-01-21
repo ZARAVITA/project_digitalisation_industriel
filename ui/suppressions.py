@@ -158,71 +158,85 @@ def render():
         # Filtrer équipements par département
         equipements_dept_equip = df_equipements[
             df_equipements['departement'] == dept_equip_select
-        ]
+            ]
 
         if equipements_dept_equip.empty:
             st.warning(f"⚠️ Aucun équipement dans le département '{dept_equip_select}'")
         else:
-            with st.form("form_suppr_equip"):
-                col1, col2 = st.columns([3, 1])
+            col1, col2 = st.columns([3, 1])
 
-                with col1:
-                    id_equip_suppr = st.selectbox(
-                        "2️⃣ Sélectionner l'équipement à supprimer",
-                        options=sorted(equipements_dept_equip['id_equipement'].tolist()),
-                        key="suppr_equip_id"
-                    )
+            with col1:
+                id_equip_suppr = st.selectbox(
+                    "2️⃣ Sélectionner l'équipement à supprimer",
+                    options=sorted(equipements_dept_equip['id_equipement'].tolist()),
+                    key="suppr_equip_id"
+                )
 
-                    # Nombre d'observations
-                    nb_obs = len(
-                        df_observations[df_observations['id_equipement'] == id_equip_suppr]
-                    )
+                # Nombre d'observations
+                nb_obs = len(
+                    df_observations[df_observations['id_equipement'] == id_equip_suppr]
+                )
 
-                    st.caption(f"📍 Département : **{dept_equip_select}**")
-                    st.caption(f"📊 **{nb_obs}** observation(s) associée(s)")
+                st.caption(f"📍 Département : **{dept_equip_select}**")
+                st.caption(f"📊 **{nb_obs}** observation(s) associée(s)")
 
-                with col2:
-                    st.write("")  # Espacement
-                    st.write("")
-                    btn_suppr_equip = st.form_submit_button(
-                        "🗑️ Supprimer",
-                        type="secondary",
-                        use_container_width=True
-                    )
+            with col2:
+                st.write("")  # Espacement
+                st.write("")
 
-                # Confirmation avec avertissement renforcé
-                if btn_suppr_equip:
-                    st.markdown("---")
-                    st.error(
-                        f"🚨 **ATTENTION - SUPPRESSION DÉFINITIVE**\n\n"
-                        f"Département : **{dept_equip_select}**\n\n"
-                        f"Équipement : **{id_equip_suppr}**\n\n"
-                        f"⚠️ Cette action supprimera également **{nb_obs} observation(s)** associée(s)\n\n"
-                        f"**Cette action est irréversible !**"
-                    )
+                # ✅ Initialiser l'état de confirmation
+                if 'confirm_equip_delete' not in st.session_state:
+                    st.session_state.confirm_equip_delete = False
 
-                    col_confirm2, col_cancel2 = st.columns(2)
+                # Premier clic : demander confirmation
+                if not st.session_state.confirm_equip_delete:
+                    if st.button(
+                            "🗑️ Supprimer",
+                            type="secondary",
+                            use_container_width=True,
+                            key="btn_suppr_equip_initial"
+                    ):
+                        st.session_state.confirm_equip_delete = True
+                        st.rerun()
 
-                    with col_confirm2:
-                        if st.form_submit_button(
-                                "✅ Confirmer suppression",
-                                type="primary",
-                                use_container_width=True
-                        ):
-                            success, message = supprimer_equipement(id_equip_suppr)
+            # ✅ Afficher la confirmation si demandée
+            if st.session_state.confirm_equip_delete:
+                st.markdown("---")
+                st.error(
+                    f"🚨 **ATTENTION - SUPPRESSION DÉFINITIVE**\n\n"
+                    f"Département : **{dept_equip_select}**\n\n"
+                    f"Équipement : **{id_equip_suppr}**\n\n"
+                    f"⚠️ Cette action supprimera également **{nb_obs} observation(s)** associée(s)\n\n"
+                    f"**Cette action est irréversible !**"
+                )
 
-                            if success:
-                                st.success(message)
-                                st.rerun()
-                            else:
-                                st.error(message)
+                col_confirm, col_cancel = st.columns(2)
 
-                    with col_cancel2:
-                        if st.form_submit_button(
-                                "❌ Annuler",
-                                use_container_width=True
-                        ):
-                            st.info("Suppression annulée")
+                with col_confirm:
+                    if st.button(
+                            "✅ Confirmer suppression",
+                            type="primary",
+                            use_container_width=True,
+                            key="btn_confirm_equip"
+                    ):
+                        success, message = supprimer_equipement(id_equip_suppr)
+
+                        if success:
+                            st.success(message)
+                            st.session_state.confirm_equip_delete = False
+                            st.rerun()
+                        else:
+                            st.error(message)
+                            st.session_state.confirm_equip_delete = False
+
+                with col_cancel:
+                    if st.button(
+                            "❌ Annuler",
+                            use_container_width=True,
+                            key="btn_cancel_equip"
+                    ):
+                        st.session_state.confirm_equip_delete = False
+                        st.rerun()
 
     # =============================================================================
     # INFORMATIONS DE SÉCURITÉ
