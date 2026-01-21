@@ -33,35 +33,35 @@ def render():
     with st.container(border=True):
         st.subheader("➕ Nouvelle observation")
 
-        # Utilisation d'un formulaire pour UX fluide
+        # ✅ SORTIR la sélection du département HORS du formulaire
+        departements = sorted(df_equipements['departement'].unique())
+        dept_selectionne = st.selectbox(
+            "1️⃣ Département",
+            options=departements,
+            key="dept_select_obs"
+        )
+
+        # Filtrage équipements par département
+        equipements_dept = df_equipements[
+            df_equipements['departement'] == dept_selectionne
+        ]
+
+        # ✅ Maintenant le formulaire
         with st.form("form_observation", clear_on_submit=True):
 
             # Ligne 1 : Sélecteurs
-            col1, col2, col3 = st.columns([2, 2, 1])
+            col1, col2 = st.columns([2, 1])
 
             with col1:
-                departements = sorted(df_equipements['departement'].unique())
-                dept_selectionne = st.selectbox(
-                    "Département",
-                    options=departements,
-                    key="form_dept"
-                )
-
-            with col2:
-                # Filtrage équipements par département
-                equipements_dept = df_equipements[
-                    df_equipements['departement'] == dept_selectionne
-                    ]
-
                 id_selectionne = st.selectbox(
-                    "Équipement",
+                    "2️⃣ Équipement",
                     options=sorted(equipements_dept['id_equipement'].tolist()),
                     key="form_equip"
                 )
 
-            with col3:
+            with col2:
                 date_obs = st.date_input(
-                    "Date",
+                    "3️⃣ Date",
                     value=datetime.now(),
                     key="form_date"
                 )
@@ -228,7 +228,7 @@ def render():
         df_display = df_display.sort_values('date', ascending=False)
 
         # Formatage date
-        df_display['date'] = df_display['date'].dt.strftime('%Y-%m-%d')
+        df_display['date'] = df_display['date'].dt.strftime('%d/%m/%Y')
 
         with col_f4:
             st.metric(

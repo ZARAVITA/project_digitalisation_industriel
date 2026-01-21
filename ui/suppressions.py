@@ -30,7 +30,6 @@ def render():
     # =============================================================================
     # CARTE 1 : SUPPRESSION D'OBSERVATIONS
     # =============================================================================
-
     with st.container(border=True):
         st.subheader("🔴 Supprimer une observation")
         st.caption("Suppression ciblée par département, équipement et date")
@@ -49,7 +48,7 @@ def render():
             # Filtrer équipements par département
             equipements_dept = df_equipements[
                 df_equipements['departement'] == dept_obs_select
-            ]
+                ]
 
             # Filtrer seulement les équipements qui ont des observations
             ids_avec_obs = df_observations['id_equipement'].unique()
@@ -60,82 +59,97 @@ def render():
             if equipements_avec_obs.empty:
                 st.warning(f"⚠️ Aucune observation dans le département '{dept_obs_select}'")
             else:
-                with st.form("form_suppr_obs"):
-                    col1, col2, col3 = st.columns([2, 2, 1])
+                # ✅ Sélection équipement HORS formulaire
+                col1, col2, col3 = st.columns([2, 2, 1])
 
-                    with col1:
-                        id_obs_suppr = st.selectbox(
-                            "2️⃣ Équipement",
-                            options=sorted(equipements_avec_obs['id_equipement'].tolist()),
-                            key="suppr_obs_equip"
-                        )
+                with col1:
+                    id_obs_suppr = st.selectbox(
+                        "2️⃣ Équipement",
+                        options=sorted(equipements_avec_obs['id_equipement'].tolist()),
+                        key="suppr_obs_equip"
+                    )
 
-                    with col2:
-                        # Filtrer les dates disponibles pour cet équipement
-                        obs_equip = df_observations[
-                            df_observations['id_equipement'] == id_obs_suppr
+                with col2:
+                    # Filtrer les dates disponibles pour cet équipement
+                    obs_equip = df_observations[
+                        df_observations['id_equipement'] == id_obs_suppr
                         ].copy()
 
-                        obs_equip['date'] = pd.to_datetime(obs_equip['date'])
-                        dates_disponibles = sorted(
-                            obs_equip['date'].dt.date.unique(),
-                            reverse=True
-                        )
+                    obs_equip['date'] = pd.to_datetime(obs_equip['date'])
+                    dates_disponibles = sorted(
+                        obs_equip['date'].dt.date.unique(),
+                        reverse=True
+                    )
 
-                        if dates_disponibles:
-                            date_obs_suppr = st.selectbox(
-                                "3️⃣ Date observation",
-                                options=dates_disponibles,
-                                key="suppr_obs_date"
+                    if dates_disponibles:
+                        date_obs_suppr = st.selectbox(
+                            "3️⃣ Date observation",
+                            options=dates_disponibles,
+                            key="suppr_obs_date"
+                        )
+                    else:
+                        st.warning("Aucune date disponible")
+                        date_obs_suppr = None
+
+                with col3:
+                    st.write("")
+                    st.write("")
+
+                    # ✅ Initialiser l'état de confirmation
+                    if 'confirm_obs_delete' not in st.session_state:
+                        st.session_state.confirm_obs_delete = False
+
+                    # Premier bouton : Demander confirmation
+                    if date_obs_suppr and not st.session_state.confirm_obs_delete:
+                        if st.button(
+                                "🗑️ Supprimer",
+                                type="secondary",
+                                use_container_width=True,
+                                key="btn_suppr_obs_initial"
+                        ):
+                            st.session_state.confirm_obs_delete = True
+                            st.rerun()
+
+                # ✅ Afficher la confirmation si demandée
+                if date_obs_suppr and st.session_state.confirm_obs_delete:
+                    st.markdown("---")
+                    st.warning(
+                        f"⚠️ **Confirmer la suppression ?**\n\n"
+                        f"Département : **{dept_obs_select}**\n\n"
+                        f"Équipement : **{id_obs_suppr}**\n\n"
+                        f"Date : **{date_obs_suppr}**"
+                    )
+
+                    col_confirm, col_cancel = st.columns(2)
+
+                    with col_confirm:
+                        if st.button(
+                                "✅ Confirmer",
+                                type="primary",
+                                use_container_width=True,
+                                key="btn_confirm_obs"
+                        ):
+                            success, message = supprimer_observation(
+                                id_obs_suppr,
+                                date_obs_suppr
                             )
-                        else:
-                            st.warning("Aucune date disponible")
-                            date_obs_suppr = None
 
-                    with col3:
-                        st.write("")  # Espacement
-                        st.write("")
-                        btn_suppr_obs = st.form_submit_button(
-                            "🗑️ Supprimer",
-                            type="secondary",
-                            use_container_width=True
-                        )
+                            if success:
+                                st.success(message)
+                                st.session_state.confirm_obs_delete = False
+                                st.rerun()
+                            else:
+                                st.error(message)
+                                st.session_state.confirm_obs_delete = False
 
-                    # Confirmation
-                    if btn_suppr_obs and date_obs_suppr:
-                        st.markdown("---")
-                        st.warning(
-                            f"⚠️ **Confirmer la suppression ?**\n\n"
-                            f"Département : **{dept_obs_select}**\n\n"
-                            f"Équipement : **{id_obs_suppr}**\n\n"
-                            f"Date : **{date_obs_suppr}**"
-                        )
-
-                        col_confirm, col_cancel = st.columns(2)
-
-                        with col_confirm:
-                            if st.form_submit_button(
-                                    "✅ Confirmer",
-                                    type="primary",
-                                    use_container_width=True
-                            ):
-                                success, message = supprimer_observation(
-                                    id_obs_suppr,
-                                    date_obs_suppr
-                                )
-
-                                if success:
-                                    st.success(message)
-                                    st.rerun()
-                                else:
-                                    st.error(message)
-
-                        with col_cancel:
-                            if st.form_submit_button(
-                                    "❌ Annuler",
-                                    use_container_width=True
-                            ):
-                                st.info("Suppression annulée")
+                    with col_cancel:
+                        if st.button(
+                                "❌ Annuler",
+                                use_container_width=True,
+                                key="btn_cancel_obs"
+                        ):
+                            st.session_state.confirm_obs_delete = False
+                            st.rerun()
 
     # =============================================================================
     # CARTE 2 : SUPPRESSION D'ÉQUIPEMENTS
