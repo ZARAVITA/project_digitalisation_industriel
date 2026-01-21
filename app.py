@@ -28,12 +28,14 @@ initialiser_fichiers()
 # INTERFACE PRINCIPALE
 # =============================================================================
 
+
+
 def main():
     """Point d'entrée principal de l'application"""
 
     # En-tête
-    st.title("🔧 Gestion des Rapports de Maintenance")
-    st.caption("Système de suivi des équipements et observations - Version Professionnelle")
+    st.title("🔧 Gestion des rapports de Maintenance")
+    st.caption("Système de suivi des équipements et observations")
     st.markdown("---")
 
     # Navigation par onglets

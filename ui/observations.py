@@ -10,7 +10,15 @@ from data.data_manager import (
     charger_observations,
     sauvegarder_observation
 )
-
+def reset_saisie():
+    for key in [
+        "obs_input",
+        "reco_input",
+        "trav_input",
+        "analyste_input"
+    ]:
+        if key in st.session_state:
+            st.session_state[key] = ""
 
 def render():
     """Affiche l'onglet Observations"""

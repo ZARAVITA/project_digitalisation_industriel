@@ -28,6 +28,7 @@ OBSERVATIONS_COLS = [
 # INITIALISATION
 # =============================================================================
 
+
 def initialiser_fichiers():
     """Crée les fichiers de données s'ils n'existent pas"""
     os.makedirs(DATA_DIR, exist_ok=True)
@@ -75,7 +76,9 @@ def charger_observations():
         DataFrame: Observations avec dates parsées
     """
     try:
-        df = pd.read_csv(OBSERVATIONS_FILE, parse_dates=["date"])
+        df = pd.read_csv(OBSERVATIONS_FILE,
+                         parse_dates=["date"],
+                         encoding='utf-8')
         if not all(col in df.columns for col in OBSERVATIONS_COLS):
             raise ValueError(f"Colonnes manquantes dans {OBSERVATIONS_FILE}")
         return df
@@ -108,15 +111,19 @@ def sauvegarder_observation(id_equipement, date, observation, recommandation, tr
 
         nouvelle_obs = pd.DataFrame([{
             "id_equipement": id_equipement,
-            "date": date.strftime("%Y-%m-%d"),
+            "date": pd.to_datetime(date),    #date.strftime("%Y-%m-%d") #-----------------------------------------------
             "observation": observation,
             "recommandation": recommandation,
             "Travaux effectués & Notes": trav_notes,
             "analyste": analyste
         }])
+        # ✅ S'assurer que la colonne date est bien en datetime avant sauvegarde ---------------------------------------
+        df_obs['date'] = pd.to_datetime(df_obs['date'])  #------------------------------------------------------------
 
         df_obs = pd.concat([df_obs, nouvelle_obs], ignore_index=True)
-        df_obs.to_csv(OBSERVATIONS_FILE, index=False)
+        df_obs.to_csv(OBSERVATIONS_FILE,
+                      index=False,
+                      encoding='utf-8')
 
         return True, "✅ Observation enregistrée avec succès"
     except Exception as e:
