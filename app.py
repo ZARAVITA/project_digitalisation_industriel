@@ -28,6 +28,8 @@ initialiser_fichiers()
 # INTERFACE PRINCIPALE
 # =============================================================================
 
+
+
 def main():
     """Point d'entrée principal de l'application"""
 
