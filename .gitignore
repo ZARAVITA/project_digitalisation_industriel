@@ -3,7 +3,6 @@ __pycache__/
 .env
 .venv/
 .ipynb_checkpoints/
-data/*.csv
 data/*.xlsx
 data/*.txt
 data/*.parquet

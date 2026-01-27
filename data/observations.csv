@@ -1,3 +1,4 @@
-id_equipement,date,observation,recommandation,Travaux effectués & Notes,analyste
-244-3P-1,2024-06-05,"Il y a eu une légère baisse en HR sur la pompe, mais encore assez élevé.",à suivre.,Mésure de la HR et la comparaison,A. Angelico
-262-1P-4,2024-04-03,Hausse des fréquences sur le moteur et la pompe. Fréquence de roulement ?,à confirmer.,Mesure,Angelico A.
+id_equipement,date,observation,recommandation,Travaux effectués & Notes,analyste,importance
+244-3P-1,2024-06-05,"Il y a eu une légère baisse en HR sur la pompe, mais encore assez élevé.",à suivre.,Mésure de la HR et la comparaison,A. Angelico,
+262-1P-4,2024-04-03,Hausse des fréquences sur le moteur et la pompe. Fréquence de roulement ?,à confirmer.,Mesure,Angelico A.,
+244-3P-2,2025-01-13,Hausse en HR sur la pompe depuis 2 mois environ- semblable à un manque de lubrification;,petite bouteille ?,Mesure,Zed,Important

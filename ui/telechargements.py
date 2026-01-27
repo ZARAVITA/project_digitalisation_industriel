@@ -1,5 +1,5 @@
 """
-Onglet Téléchargements - Export Excel filtré
+Onglet TÃ©lÃ©chargements - Export Excel filtrÃ©
 """
 
 import streamlit as st
@@ -14,17 +14,17 @@ from data.data_manager import (
 
 
 def render():
-    """Affiche l'onglet Téléchargements"""
+    """Affiche l'onglet TÃ©lÃ©chargements"""
 
-    st.header("📥 Exports Excel")
+    st.header("Exports Excel")
     st.caption("Générez des fichiers Excel propres et exploitables")
 
-    # Chargement données
+    # Chargement donnÃ©es
     df_equipements = charger_equipements()
     df_observations = charger_observations()
 
     if df_equipements.empty:
-        st.warning("⚠️ Aucun équipement disponible")
+        st.warning("Aucun équipement disponible")
         return
 
     # =============================================================================
@@ -32,10 +32,10 @@ def render():
     # =============================================================================
 
     with st.container(border=True):
-        st.subheader("📊 Rapport d'observations")
+        st.subheader("Rapport d'observations")
 
         if df_observations.empty:
-            st.info("ℹ️ Aucune observation à exporter")
+            st.info("Aucune observation à exporter")
         else:
             # Conversion dates
             df_obs = df_observations.copy()
@@ -54,7 +54,7 @@ def render():
                 )
 
             with col_f2:
-                # Équipements disponibles
+                # Ã‰quipements disponibles
                 if dept_filter:
                     equip_disponibles = df_equipements[
                         df_equipements['departement'].isin(dept_filter)
@@ -63,7 +63,7 @@ def render():
                     equip_disponibles = df_equipements['id_equipement'].tolist()
 
                 equip_filter = st.multiselect(
-                    "Équipement(s)",
+                    "Equipement(s)",
                     options=sorted(equip_disponibles),
                     default=None,
                     placeholder="Tous les équipements",
@@ -120,11 +120,11 @@ def render():
                 st.write(f"**{len(df_filtered)}** observation(s) à exporter")
 
                 if dept_filter:
-                    st.caption(f"📍 Départements : {', '.join(dept_filter)}")
+                    st.caption(f"Départements : {', '.join(dept_filter)}")
                 if equip_filter:
-                    st.caption(f"🔧 Équipements : {', '.join(equip_filter)}")
+                    st.caption(f"Equipements : {', '.join(equip_filter)}")
 
-                st.caption(f"📅 Période : {date_debut} → {date_fin}")
+                st.caption(f"Période : {date_debut} à’ {date_fin}")
 
             with col_btn:
                 if len(df_filtered) > 0:
@@ -135,7 +135,7 @@ def render():
                     nom_fichier = f"rapport_observations_{timestamp}.xlsx"
 
                     st.download_button(
-                        label="📥 Télécharger",
+                        label="Télécharger",
                         data=fichier,
                         file_name=nom_fichier,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -144,22 +144,22 @@ def render():
                     )
                 else:
                     st.button(
-                        "📥 Télécharger",
+                        "Télécharger",
                         disabled=True,
                         use_container_width=True
                     )
                     st.caption("Aucune donnée")
 
     # =============================================================================
-    # CARTE 2 : ÉQUIPEMENTS
+    # CARTE 2 : Ã‰QUIPEMENTS
     # =============================================================================
 
     st.markdown("##")
 
     with st.container(border=True):
-        st.subheader("📦 Liste des équipements")
+        st.subheader("Liste des équipements")
 
-        # Filtre département
+        # Filtre dÃ©partement
         dept_filter_equip = st.multiselect(
             "Département(s)",
             options=sorted(df_equipements['departement'].unique()),
@@ -185,9 +185,9 @@ def render():
             st.write(f"**{len(df_filtered_equip)}** équipement(s) à exporter")
 
             if dept_filter_equip:
-                st.caption(f"📍 Départements : {', '.join(dept_filter_equip)}")
+                st.caption(f" Départements : {', '.join(dept_filter_equip)}")
             else:
-                st.caption("📍 Tous les départements")
+                st.caption("Tous les départements")
 
         with col_btn2:
             if len(df_filtered_equip) > 0:
@@ -197,7 +197,7 @@ def render():
                 nom_fichier_equip = f"equipements_{timestamp}.xlsx"
 
                 st.download_button(
-                    label="📥 Télécharger",
+                    label="Télécharger",
                     data=fichier_equip,
                     file_name=nom_fichier_equip,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -206,18 +206,18 @@ def render():
                 )
             else:
                 st.button(
-                    "📥 Télécharger",
+                    "Télécharger",
                     disabled=True,
                     use_container_width=True
                 )
 
     # =============================================================================
-    # INFORMATIONS COMPLÉMENTAIRES
+    # INFORMATIONS COMPLÃ‰MENTAIRES
     # =============================================================================
 
     st.markdown("##")
 
-    with st.expander("ℹ️ À propos des exports"):
+    with st.expander("À propos des exports"):
         st.markdown("""
         **Format des fichiers :**
         - Format : Excel (.xlsx)
@@ -229,7 +229,7 @@ def render():
         - Incluent le département et l'ID équipement
         - Tous les champs sont présents
 
-        **Équipements :**
+        **Equipements :**
         - Triés par département puis ID
         - Format simple : ID + Département
         """)
