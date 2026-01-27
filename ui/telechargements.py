@@ -124,7 +124,7 @@ def render():
                 if equip_filter:
                     st.caption(f"Equipements : {', '.join(equip_filter)}")
 
-                st.caption(f"Période : {date_debut} à’ {date_fin}")
+                st.caption(f"Période : {date_debut} à {date_fin}")
 
             with col_btn:
                 if len(df_filtered) > 0:
@@ -135,7 +135,7 @@ def render():
                     nom_fichier = f"rapport_observations_{timestamp}.xlsx"
 
                     st.download_button(
-                        label="Télécharger",
+                        label="📥 Télécharger",
                         data=fichier,
                         file_name=nom_fichier,
                         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -144,7 +144,7 @@ def render():
                     )
                 else:
                     st.button(
-                        "Télécharger",
+                        "📥 Télécharger",
                         disabled=True,
                         use_container_width=True
                     )
@@ -197,7 +197,7 @@ def render():
                 nom_fichier_equip = f"equipements_{timestamp}.xlsx"
 
                 st.download_button(
-                    label="Télécharger",
+                    label="📥 Télécharger",
                     data=fichier_equip,
                     file_name=nom_fichier_equip,
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -206,7 +206,7 @@ def render():
                 )
             else:
                 st.button(
-                    "Télécharger",
+                    "📥 Télécharger",
                     disabled=True,
                     use_container_width=True
                 )
