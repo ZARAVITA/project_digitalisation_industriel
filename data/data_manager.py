@@ -15,7 +15,7 @@ from io import BytesIO
 DATA_DIR = "data"
 EQUIPEMENTS_FILE = os.path.join(DATA_DIR, "equipements.xlsx")
 OBSERVATIONS_FILE = os.path.join(DATA_DIR, "observations.csv")
-SUIVI_FILE = os.path.join(DATA_DIR, "suivi_equipements.csv")
+SUIVI_FILE = os.path.join(DATA_DIR, "suivi_equipements_enrichi.csv") #--------------------------------------
 
 # Schéma des données
 EQUIPEMENTS_COLS = ["id_equipement", "departement"]
