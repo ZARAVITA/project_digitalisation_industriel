@@ -1,6 +1,6 @@
 """
 Module de gestion des données (Excel/CSV)
-Prêt pour migration future vers Supabase
+Prêt pour migration future vers Supabase.
 """
 
 import pandas as pd
