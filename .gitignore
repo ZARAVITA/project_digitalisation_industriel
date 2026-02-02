@@ -9,3 +9,4 @@ data/*.parquet
 data/*.db
 data/migrate_to_supabase.py
 .streamlit/*
+data/update_importance.py
