@@ -99,14 +99,31 @@ def render():
 
             st.markdown("##")
 
-            # Ligne 3 : Analyste et bouton
-            col_analyste, col_btn = st.columns([3, 1])
+            # Ligne 3 : Analyste, Importance et bouton
+            col_analyste, col_importance, col_btn = st.columns([2, 2, 1])
 
             with col_analyste:
                 analyste = st.text_input(
                     "Analyste *",
                     placeholder="Nom de l'analyste",
                     key="form_analyste"
+                )
+
+            with col_importance:
+                # Menu déroulant pour l'importance
+                importance_options = [
+                    "",  # Option vide par défaut
+                    "Très important",
+                    "Important",
+                    "Moins important",
+                    "Pas de collecte mais important",
+                    "Collecte réalisée"
+                ]
+                importance = st.selectbox(
+                    "Importance",
+                    options=importance_options,
+                    key="form_importance",
+                    help="Sélectionnez le niveau d'importance (optionnel)"
                 )
 
             with col_btn:
@@ -132,7 +149,8 @@ def render():
                         observation.strip(),
                         recommandation.strip(),
                         travaux.strip(),
-                        analyste.strip()
+                        analyste.strip(),
+                        importance if importance else None
                     )
 
                     if success:
@@ -248,7 +266,7 @@ def render():
             df_display[[
                 'departement', 'id_equipement', 'date',
                 'observation', 'recommandation',
-                'Travaux effectués & Notes', 'analyste'
+                'Travaux effectués & Notes', 'analyste', 'importance'
             ]],
             use_container_width=True,
             hide_index=True,
@@ -268,7 +286,8 @@ def render():
                     'Travaux & Notes',
                     width='large'
                 ),
-                'analyste': 'Analyste'
+                'analyste': 'Analyste',
+                'importance': 'Importance'
             }
         )
 

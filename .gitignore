@@ -7,4 +7,5 @@ data/*.xlsx
 data/*.txt
 data/*.parquet
 data/*.db
-
+data/migrate_to_supabase.py
+.streamlit/*

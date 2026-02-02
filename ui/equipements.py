@@ -7,44 +7,10 @@ import pandas as pd
 from datetime import datetime
 from data.data_manager import (
     charger_equipements,
+    sauvegarder_equipement,
     exporter_equipements_excel
 )
 
-
-def sauvegarder_equipement(id_equipement, departement):
-    """
-    Ajoute un nouvel équipement au référentiel
-
-    Args:
-        id_equipement (str): ID de l'équipement
-        departement (str): Nom du département
-
-    Returns:
-        tuple: (success: bool, message: str)
-    """
-    try:
-        df_equip = charger_equipements()
-
-        # Vérifier si l'équipement existe déjà
-        if id_equipement in df_equip['id_equipement'].values:
-            return False, f"⚠️ L'équipement '{id_equipement}' existe déjà"
-
-        # Ajouter le nouvel équipement
-        nouvel_equip = pd.DataFrame([{
-            'id_equipement': id_equipement,
-            'departement': departement
-        }])
-
-        df_equip = pd.concat([df_equip, nouvel_equip], ignore_index=True)
-
-        # Sauvegarder dans Excel
-        from data.data_manager import EQUIPEMENTS_FILE
-        df_equip.to_excel(EQUIPEMENTS_FILE, index=False)
-
-        return True, f"✅ Équipement '{id_equipement}' ajouté au département '{departement}'"
-
-    except Exception as e:
-        return False, f"❌ Erreur lors de l'ajout : {e}"
 
 
 def render():
