@@ -229,6 +229,54 @@ def sauvegarder_observation(id_equipement, date, observation, recommandation, tr
 
 
 # =============================================================================
+# ÉCRITURE DES DONNÉES - SUIVI
+# =============================================================================
+
+def sauvegarder_suivi(id_equipement, point_mesure, date, vitesse_rpm, twf_rms_g, crest_factor, twf_peak_to_peak_g):
+    """
+    Enregistre une nouvelle mesure de suivi dans Supabase
+
+    Args:
+        id_equipement (str): Identifiant équipement
+        point_mesure (str): Point de mesure
+        date (datetime): Date de la mesure
+        vitesse_rpm (float): Vitesse en RPM
+        twf_rms_g (float): TWF RMS en g
+        crest_factor (float): Facteur de crête
+        twf_peak_to_peak_g (float): TWF Peak-to-Peak en g
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        client = get_supabase_client()
+
+        # Préparer les données
+        data = {
+            "id_equipement": id_equipement,
+            "point_mesure": point_mesure,
+            "date": pd.to_datetime(date).strftime("%Y-%m-%d"),
+            "vitesse_rpm": float(vitesse_rpm),
+            "twf_rms_g": float(twf_rms_g),
+            "crest_factor": float(crest_factor),
+            "twf_peak_to_peak_g": float(twf_peak_to_peak_g)
+        }
+
+        # Insérer dans Supabase
+        response = client.table("suivi_equipements").insert(data).execute()
+
+        if response.data:
+            return True, "✅ Mesure de suivi enregistrée avec succès"
+        else:
+            return False, "❌ Erreur lors de l'enregistrement"
+
+    except Exception as e:
+        # Gestion de l'erreur de doublon (contrainte UNIQUE)
+        if "duplicate key value" in str(e).lower() or "unique constraint" in str(e).lower():
+            return False, f"⚠️ Une mesure existe déjà pour cet équipement, point de mesure et date"
+        return False, f"❌ Erreur lors de la sauvegarde : {e}"
+
+# =============================================================================
 # ÉCRITURE DES DONNÉES - ÉQUIPEMENTS
 # =============================================================================
 
