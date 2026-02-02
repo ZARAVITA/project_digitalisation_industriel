@@ -13,6 +13,7 @@ maintenance-app/
 ├── data/                           # Répertoire données (créé automatiquement)
 │   ├── equipements.xlsx            # Référentiel équipements
 │   └── observations.csv            # Historique observations
+|   ├── data_manager_supabase.py    
 │
 ├── data/
 │   └── data_manager.py             # Couche d'accès données
