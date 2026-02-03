@@ -66,8 +66,8 @@ def render():
                 date_obs = st.date_input(
                     "3️⃣ Date",
                     value=datetime.now(),
-                    min_value=datetime(1990, 1, 1),
-                    max_value=datetime(2099, 12, 31),
+                    min_value=datetime(1990, 1, 1).date(),
+                    max_value=datetime(2099, 12, 31).date(),
                     key="form_date"
                 )
 
@@ -230,8 +230,8 @@ def render():
                 date_suivi = st.date_input(
                     "4️⃣ Date",
                     value=datetime.now(),
-                    min_value=datetime(1990, 1, 1),
-                    max_value=datetime(2099, 1, 1),
+                    min_value=datetime(1990, 1, 1).date(),
+                    max_value=datetime(2099, 1, 1).date(),
                     key="form_suivi_date"
                 )
 
@@ -399,8 +399,8 @@ def render():
                 date_debut_suivi = st.date_input(
                     "Date début",
                     value=date_min_suivi,
-                    min_value=datetime(1990, 1, 1),
-                    max_value=datetime(2099, 12, 31),
+                    min_value=date_min_suivi, #datetime(1990, 1, 1).date(),
+                    max_value= date_max_suivi,      #datetime(2099, 12, 31).date(),
                     key="date_debut_tendances"
                 )
 
@@ -408,8 +408,8 @@ def render():
                 date_fin_suivi = st.date_input(
                     "Date fin",
                     value=date_max_suivi,
-                    mmin_value=datetime(1990, 1, 1),
-                    max_value=datetime(2099, 12, 31),
+                    min_value=datetime(1990, 1, 1).date(),
+                    max_value=datetime(2099, 12, 31).date(),
                     key="date_fin_tendances"
                 )
 
