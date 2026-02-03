@@ -409,7 +409,7 @@ L'application s'ouvre automatiquement dans votre navigateur à l'adresse `http:/
 
 ### Choix techniques
 
-- **Stockage** : Excel (équipements) + CSV (observations, suivi) - Migration Supabase prévue
+- **Stockage** : Supabase
 - **Framework UI** : Streamlit pour développement rapide et UX réactive
 - **Manipulation données** : Pandas pour le traitement des DataFrames
 - **Visualisation** : Plotly pour graphiques interactifs
@@ -425,7 +425,7 @@ ui/observations.py (Interface)
     ↓
 data/data_manager.py (Logique métier)
     ↓
-Fichiers CSV/Excel (Stockage)
+Base de données Supabase (Stockage)
 ```
 
 ### Points de migration Supabase
@@ -433,11 +433,7 @@ Fichiers CSV/Excel (Stockage)
 Les fonctions dans `data_manager.py` sont conçues pour être facilement migrées vers Supabase :
 
 ```python
-# Actuellement : Stockage fichiers
-def charger_observations():
-    return pd.read_csv(OBSERVATIONS_FILE, parse_dates=["date"])
-
-# Future migration Supabase :
+# Supabase :
 def charger_observations():
     response = supabase.table('observations').select('*').execute()
     return pd.DataFrame(response.data)
@@ -683,7 +679,6 @@ df = pd.read_csv('data/observations.csv', encoding='latin1')
 ## 🔄 Évolutions futures
 
 ### Version 3.0 (Prévue)
-- [ ] **Migration vers Supabase** (base de données cloud)
 - [ ] **Authentification utilisateurs** avec rôles (admin, analyste, lecteur)
 - [ ] **Historique des modifications** (audit trail)
 - [ ] **Notifications automatiques** (seuils dépassés, maintenance due)
@@ -725,7 +720,7 @@ Ce projet suit une architecture modulaire pour faciliter les contributions :
 
 Pour toute question, problème ou suggestion :
 
-📧 **Email** : maintenance@entreprise.com  
+📧 **Email** : zaravitamds18@gmail.com  
 📱 **Téléphone** : +212 770 636 297 
 💬 **Slack** : #maintenance-support  
 📝 **Documentation** : Wiki interne  
