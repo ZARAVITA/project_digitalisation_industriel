@@ -179,7 +179,17 @@ def render():
             "Entrée Réducteur",
             "Sortie Réducteur",
             "P-CA",
-            "P-COA"
+            "P-COA",
+            "A1-CA",
+            "A1-COA",
+            "A2-CA",
+            "A2-COA",
+            "A3-CA",
+            "A3-COA",
+            "A4-CA",
+            "A4-COA",
+            "A5-CA",
+            "A5-COA"
         ]
 
         # Sélection du département HORS du formulaire
