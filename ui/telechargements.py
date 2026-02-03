@@ -83,8 +83,8 @@ def render():
                 date_debut = st.date_input(
                     "Date début",
                     value=date_min,
-                    min_value=date_min,
-                    max_value=date_max,
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="dl_obs_date_start"
                 )
 
@@ -92,8 +92,8 @@ def render():
                 date_fin = st.date_input(
                     "Date fin",
                     value=date_max,
-                    min_value=date_min,
-                    max_value=date_max,
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="dl_obs_date_end"
                 )
 
@@ -271,8 +271,8 @@ def render():
                 date_debut_suivi = st.date_input(
                     "Date début",
                     value=date_min_suivi,
-                    min_value=date_min_suivi,
-                    max_value=date_max_suivi,
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="dl_suivi_date_start"
                 )
 
@@ -280,8 +280,8 @@ def render():
                 date_fin_suivi = st.date_input(
                     "Date fin",
                     value=date_max_suivi,
-                    min_value=date_min_suivi,
-                    max_value=date_max_suivi,
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="dl_suivi_date_end"
                 )
 

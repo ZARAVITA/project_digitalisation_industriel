@@ -66,6 +66,8 @@ def render():
                 date_obs = st.date_input(
                     "3️⃣ Date",
                     value=datetime.now(),
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="form_date"
                 )
 
@@ -228,6 +230,8 @@ def render():
                 date_suivi = st.date_input(
                     "4️⃣ Date",
                     value=datetime.now(),
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 1, 1),
                     key="form_suivi_date"
                 )
 
@@ -254,7 +258,7 @@ def render():
                     max_value=100.0,
                     value=0.0,
                     step=0.01,
-                    format="%.2f",
+                    format="%.3f",
                     key="form_suivi_twf_rms"
                 )
 
@@ -265,7 +269,7 @@ def render():
                     max_value=100.0,
                     value=0.0,
                     step=0.1,
-                    format="%.2f",
+                    format="%.3f",
                     key="form_suivi_crest"
                 )
 
@@ -276,7 +280,7 @@ def render():
                     max_value=100.0,
                     value=0.0,
                     step=0.01,
-                    format="%.2f",
+                    format="%.3f",
                     key="form_suivi_peak"
                 )
 
@@ -395,8 +399,8 @@ def render():
                 date_debut_suivi = st.date_input(
                     "Date début",
                     value=date_min_suivi,
-                    min_value=date_min_suivi,
-                    max_value=date_max_suivi,
+                    min_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="date_debut_tendances"
                 )
 
@@ -404,8 +408,8 @@ def render():
                 date_fin_suivi = st.date_input(
                     "Date fin",
                     value=date_max_suivi,
-                    min_value=date_min_suivi,
-                    max_value=date_max_suivi,
+                    mmin_value=datetime(1990, 1, 1),
+                    max_value=datetime(2099, 12, 31),
                     key="date_fin_tendances"
                 )
 
