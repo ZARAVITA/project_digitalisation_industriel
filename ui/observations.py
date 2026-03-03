@@ -36,7 +36,6 @@ def render():
     with st.container(border=True):
         st.subheader("➕ Nouvelle observation")
 
-        # Sélection du département HORS du formulaire
         departements = sorted(df_equipements['departement'].unique())
         dept_selectionne = st.selectbox(
             "1️⃣ Département",
@@ -44,15 +43,12 @@ def render():
             key="dept_select_obs"
         )
 
-        # Filtrage équipements par département
         equipements_dept = df_equipements[
             df_equipements['departement'] == dept_selectionne
         ]
 
-        # Formulaire
         with st.form("form_observation", clear_on_submit=True):
 
-            # Ligne 1 : Sélecteurs
             col1, col2 = st.columns([2, 1])
 
             with col1:
@@ -73,7 +69,6 @@ def render():
 
             st.markdown("##")
 
-            # Ligne 2 : Champs texte
             col_obs, col_reco, col_trav = st.columns(3)
 
             with col_obs:
@@ -102,7 +97,6 @@ def render():
 
             st.markdown("##")
 
-            # Ligne 3 : Analyste, Importance et bouton
             col_analyste, col_importance, col_btn = st.columns([2, 2, 1])
 
             with col_analyste:
@@ -113,9 +107,8 @@ def render():
                 )
 
             with col_importance:
-                # Menu déroulant pour l'importance
                 importance_options = [
-                    "",  # Option vide par défaut
+                    "",
                     "Très important",
                     "Important",
                     "Moins important",
@@ -130,22 +123,19 @@ def render():
                 )
 
             with col_btn:
-                st.write("")  # Espacement vertical
+                st.write("")
                 submitted = st.form_submit_button(
                     "✅ Enregistrer",
                     type="primary",
                     use_container_width=True
                 )
 
-            # Validation et enregistrement
             if submitted:
-                # Validation champs requis
                 if not observation.strip():
                     st.error("⚠️ L'observation est requise")
                 elif not analyste.strip():
                     st.error("⚠️ Le nom de l'analyste est requis")
                 else:
-                    # Sauvegarde
                     success, message = sauvegarder_observation(
                         id_selectionne,
                         date_obs,
@@ -155,12 +145,12 @@ def render():
                         analyste.strip(),
                         importance if importance else None
                     )
-
                     if success:
                         st.success(message)
                         st.rerun()
                     else:
                         st.error(message)
+
     # =============================================================================
     # BLOC 2 : SAISIE DONNÉES DE SUIVI
     # =============================================================================
@@ -171,45 +161,26 @@ def render():
         st.subheader("📊 Saisie des mesures de suivi")
         st.caption("Enregistrement des données vibratoires et de vitesse")
 
-        # Chargement des données de suivi
         df_suivi = charger_suivi()
 
-        # Liste des points de mesure
         POINTS_MESURE = [
-            "M-COA",
-            "M-CA",
-            "Entrée Réducteur",
-            "Sortie Réducteur",
-            "P-CA",
-            "P-COA",
-            "A1-CA",
-            "A1-COA",
-            "A2-CA",
-            "A2-COA",
-            "A3-CA",
-            "A3-COA",
-            "A4-CA",
-            "A4-COA",
-            "A5-CA",
-            "A5-COA"
+            "M-COA", "M-CA", "Entrée Réducteur", "Sortie Réducteur",
+            "P-CA", "P-COA", "A1-CA", "A1-COA", "A2-CA", "A2-COA",
+            "A3-CA", "A3-COA", "A4-CA", "A4-COA", "A5-CA", "A5-COA"
         ]
 
-        # Sélection du département HORS du formulaire
         dept_suivi = st.selectbox(
             "1️⃣ Département",
             options=departements,
             key="dept_select_suivi"
         )
 
-        # Filtrage équipements par département
         equipements_dept_suivi = df_equipements[
             df_equipements["departement"] == dept_suivi
-            ]
+        ]
 
-        # Formulaire de saisie
         with st.form("form_suivi", clear_on_submit=True):
 
-            # Ligne 1 : Sélecteurs principaux
             col1, col2, col3 = st.columns([2, 2, 1])
 
             with col1:
@@ -237,56 +208,42 @@ def render():
 
             st.markdown("##")
 
-            # Ligne 2 : Mesures numériques
             col_v, col_twf, col_crest, col_peak = st.columns(4)
 
             with col_v:
                 vitesse_rpm = st.number_input(
                     "Vitesse (RPM) *",
-                    min_value=0.0,
-                    max_value=10000.0,
-                    value=0.0,
-                    step=10.0,
-                    format="%.2f",
+                    min_value=0.0, max_value=10000.0,
+                    value=0.0, step=10.0, format="%.2f",
                     key="form_suivi_vitesse"
                 )
 
             with col_twf:
                 twf_rms_g = st.number_input(
                     "TWF RMS (g) *",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=0.0,
-                    step=0.01,
-                    format="%.3f",
+                    min_value=0.0, max_value=100.0,
+                    value=0.0, step=0.01, format="%.3f",
                     key="form_suivi_twf_rms"
                 )
 
             with col_crest:
                 crest_factor = st.number_input(
                     "CREST FACTOR *",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=0.0,
-                    step=0.1,
-                    format="%.3f",
+                    min_value=0.0, max_value=100.0,
+                    value=0.0, step=0.1, format="%.3f",
                     key="form_suivi_crest"
                 )
 
             with col_peak:
                 twf_peak = st.number_input(
                     "TWF Peak to Peak (g) *",
-                    min_value=0.0,
-                    max_value=100.0,
-                    value=0.0,
-                    step=0.01,
-                    format="%.3f",
+                    min_value=0.0, max_value=100.0,
+                    value=0.0, step=0.01, format="%.3f",
                     key="form_suivi_peak"
                 )
 
             st.markdown("##")
 
-            # Bouton de soumission
             col_info, col_btn_suivi = st.columns([3, 1])
 
             with col_info:
@@ -299,26 +256,15 @@ def render():
                     use_container_width=True
                 )
 
-            # Validation et enregistrement
             if submitted_suivi:
-                if (
-                        vitesse_rpm == 0.0
-                        and twf_rms_g == 0.0
-                        and crest_factor == 0.0
-                        and twf_peak == 0.0
-                ):
+                if (vitesse_rpm == 0.0 and twf_rms_g == 0.0
+                        and crest_factor == 0.0 and twf_peak == 0.0):
                     st.error("⚠️ Au moins une mesure doit être différente de zéro")
                 else:
                     success, message = sauvegarder_suivi(
-                        id_suivi,
-                        point_mesure,
-                        date_suivi,
-                        vitesse_rpm,
-                        twf_rms_g,
-                        crest_factor,
-                        twf_peak
+                        id_suivi, point_mesure, date_suivi,
+                        vitesse_rpm, twf_rms_g, crest_factor, twf_peak
                     )
-
                     if success:
                         st.success(message)
                         st.rerun()
@@ -344,11 +290,10 @@ def render():
         # Conversion dates
         df_suivi['date'] = pd.to_datetime(df_suivi['date'], errors='coerce')
 
-        # FILTRES
+        # ── ÉQUIPEMENT PRINCIPAL ──────────────────────────────────────────────
         col_f1, col_f2 = st.columns(2)
 
         with col_f1:
-            # Filtre ID équipement
             id_equip_suivi = st.selectbox(
                 "ID Équipement",
                 options=sorted(df_suivi['id_equipement'].unique()),
@@ -356,7 +301,6 @@ def render():
             )
 
         with col_f2:
-            # Filtre point de mesure
             df_equip_suivi = df_suivi[df_suivi['id_equipement'] == id_equip_suivi]
             point_mesure_suivi = st.selectbox(
                 "Point de mesure",
@@ -364,7 +308,7 @@ def render():
                 key="point_mesure_tendances"
             )
 
-        # Filtrer les données
+        # Filtrer les données principales
         df_filtered_suivi = df_suivi[
             (df_suivi['id_equipement'] == id_equip_suivi) &
             (df_suivi['point_mesure'] == point_mesure_suivi)
@@ -374,16 +318,53 @@ def render():
             st.warning("⚠️ Aucune donnée pour cette sélection")
             return
 
-        # Trier par date
         df_filtered_suivi = df_filtered_suivi.sort_values('date')
 
-        st.markdown("##")
+        # ── ÉQUIPEMENT DE COMPARAISON (optionnel) ────────────────────────────
+        #st.markdown("##")
+        ajouter_comparaison = st.toggle(
+            "➕ Ajouter un équipement de comparaison",
+            value=False,
+            key="toggle_comparaison"
+        )
 
-        # FILTRES TEMPORELS
+        df_filtered_suivi2 = None
+        id_equip_suivi2 = None
+        point_mesure_suivi2 = None
+
+        if ajouter_comparaison:
+            col_c1, col_c2 = st.columns(2)
+
+            with col_c1:
+                id_equip_suivi2 = st.selectbox(
+                    "ID Équipement (comparaison)",
+                    options=sorted(df_suivi['id_equipement'].unique()),
+                    key="id_equip_tendances2"
+                )
+
+            with col_c2:
+                df_equip_suivi2 = df_suivi[df_suivi['id_equipement'] == id_equip_suivi2]
+                point_mesure_suivi2 = st.selectbox(
+                    "Point de mesure (comparaison)",
+                    options=sorted(df_equip_suivi2['point_mesure'].unique()),
+                    key="point_mesure_tendances2"
+                )
+
+            df_filtered_suivi2 = df_suivi[
+                (df_suivi['id_equipement'] == id_equip_suivi2) &
+                (df_suivi['point_mesure'] == point_mesure_suivi2)
+            ].copy().sort_values('date')
+
+            if df_filtered_suivi2.empty:
+                st.warning("⚠️ Aucune donnée pour l'équipement de comparaison")
+                df_filtered_suivi2 = None
+
+        #st.markdown("##")
+
+        # ── FILTRES TEMPORELS ─────────────────────────────────────────────────
         col_t1, col_t2, col_t3 = st.columns([2, 2, 1])
 
         with col_t1:
-            # Mode de filtrage
             mode_filtrage = st.radio(
                 "Mode de filtrage",
                 options=["Période personnalisée", "22 dernières observations"],
@@ -399,8 +380,8 @@ def render():
                 date_debut_suivi = st.date_input(
                     "Date début",
                     value=date_min_suivi,
-                    min_value=date_min_suivi, #datetime(1990, 1, 1).date(),
-                    max_value= date_max_suivi,      #datetime(2099, 12, 31).date(),
+                    min_value=date_min_suivi,
+                    max_value=date_max_suivi,
                     key="date_debut_tendances"
                 )
 
@@ -413,18 +394,23 @@ def render():
                     key="date_fin_tendances"
                 )
 
-            # Appliquer le filtre de dates
             df_filtered_suivi = df_filtered_suivi[
                 (df_filtered_suivi['date'].dt.date >= date_debut_suivi) &
                 (df_filtered_suivi['date'].dt.date <= date_fin_suivi)
             ]
+            if df_filtered_suivi2 is not None:
+                df_filtered_suivi2 = df_filtered_suivi2[
+                    (df_filtered_suivi2['date'].dt.date >= date_debut_suivi) &
+                    (df_filtered_suivi2['date'].dt.date <= date_fin_suivi)
+                ]
         else:
-            # Prendre les 22 dernières observations (ou moins si insuffisant)
             df_filtered_suivi = df_filtered_suivi.tail(22)
+            if df_filtered_suivi2 is not None:
+                df_filtered_suivi2 = df_filtered_suivi2.tail(22)
 
-        st.markdown("##")
+        #st.markdown("##")
 
-        # SÉLECTION DES VARIABLES
+        # ── SÉLECTION DES VARIABLES ───────────────────────────────────────────
         variables_disponibles = {
             'vitesse_rpm': 'Vitesse (RPM)',
             'twf_rms_g': 'TWF RMS (g)',
@@ -444,32 +430,81 @@ def render():
             st.warning("⚠️ Veuillez sélectionner au moins une variable")
             return
 
-        st.markdown("##")
+        #st.markdown("##")
 
-        # CRÉATION DU GRAPHIQUE
+        # ── CRÉATION DU GRAPHIQUE ─────────────────────────────────────────────
         fig = go.Figure()
 
-        # Palette de couleurs
-        couleurs = {
-            'vitesse_rpm': '#1f77b4',
-            'twf_rms_g': '#ff7f0e',
-            'crest_factor': '#2ca02c',
+        # Palette équipement principal (couleurs originales)
+        couleurs_principal = {
+            'vitesse_rpm':        '#1f77b4',
+            'twf_rms_g':          '#ff7f0e',
+            'crest_factor':       '#2ca02c',
             'twf_peak_to_peak_g': '#d62728'
         }
 
+        # Palette équipement de comparaison (nuances distinctes)
+        couleurs_comparaison = {
+            'vitesse_rpm':        '#aec7e8',
+            'twf_rms_g':          '#c5b0d5',
+            'crest_factor':       '#98df8a',
+            'twf_peak_to_peak_g': '#ff9896'
+        }
+
+        # Traces équipement principal
         for var in variables_selectionnees:
+            df_trace = (
+                df_filtered_suivi[['date', var]]
+                .dropna(subset=['date', var])
+                .drop_duplicates(subset='date')
+                .sort_values('date')
+            )
+            legend_label = (
+                f"{variables_disponibles[var]} — {id_equip_suivi} | {point_mesure_suivi}"
+                if df_filtered_suivi2 is not None
+                else variables_disponibles[var]
+            )
             fig.add_trace(go.Scatter(
-                x=df_filtered_suivi['date'],
-                y=df_filtered_suivi[var],
+                x=df_trace['date'],
+                y=df_trace[var],
                 mode='lines+markers',
-                name=variables_disponibles[var],
-                line=dict(color=couleurs[var], width=2),
-                marker=dict(size=6)
+                name=legend_label,
+                connectgaps=True,
+                line=dict(color=couleurs_principal[var], width=2),
+                marker=dict(size=6, symbol='circle')
             ))
 
-        # Mise en forme
+        # Traces équipement de comparaison
+        if df_filtered_suivi2 is not None and not df_filtered_suivi2.empty:
+            for var in variables_selectionnees:
+                df_trace2 = (
+                    df_filtered_suivi2[['date', var]]
+                    .dropna(subset=['date', var])
+                    .drop_duplicates(subset='date')
+                    .sort_values('date')
+                )
+                fig.add_trace(go.Scatter(
+                    x=df_trace2['date'],
+                    y=df_trace2[var],
+                    mode='lines+markers',
+                    name=f"{variables_disponibles[var]} — {id_equip_suivi2} | {point_mesure_suivi2}",
+                    connectgaps=True,
+                    line=dict(color=couleurs_comparaison[var], width=2), #, dash='dash'),
+                    marker=dict(size=6, symbol='circle')#symbol='diamond')
+                ))
+
+        # Titre dynamique
+        if df_filtered_suivi2 is not None:
+            titre = (
+                f"Tendances — {id_equip_suivi} ({point_mesure_suivi})"
+                f"  vs  {id_equip_suivi2} ({point_mesure_suivi2})"
+            )
+        else:
+            titre = f"Tendances - {id_equip_suivi} - {point_mesure_suivi}"
+
+        # Mise en forme (identique à l'original)
         fig.update_layout(
-            title=f"Tendances - {id_equip_suivi} - {point_mesure_suivi}",
+            title=titre,
             xaxis_title="Date",
             yaxis_title="Valeurs",
             hovermode='x unified',
@@ -485,12 +520,15 @@ def render():
 
         st.plotly_chart(fig, use_container_width=True)
 
-        # Statistiques
+        # ── Statistiques ──────────────────────────────────────────────────────
         st.markdown("##")
-        st.caption(f"**{len(df_filtered_suivi)}** mesure(s) affichée(s)")
+        st.caption(f"**{len(df_filtered_suivi)}** mesure(s) affichée(s) — {id_equip_suivi} | {point_mesure_suivi}")
+        if df_filtered_suivi2 is not None and not df_filtered_suivi2.empty:
+            st.caption(f"**{len(df_filtered_suivi2)}** mesure(s) affichée(s) — {id_equip_suivi2} | {point_mesure_suivi2}")
 
-        # Tableau récapitulatif
         with st.expander("📊 Statistiques détaillées"):
+            if df_filtered_suivi2 is not None:
+                st.markdown(f"**{id_equip_suivi} — {point_mesure_suivi}**")
             stats_data = []
             for var in variables_selectionnees:
                 stats_data.append({
@@ -500,9 +538,18 @@ def render():
                     'Moyenne': f"{df_filtered_suivi[var].mean():.2f}",
                     'Écart-type': f"{df_filtered_suivi[var].std():.2f}"
                 })
+            st.dataframe(pd.DataFrame(stats_data), use_container_width=True, hide_index=True)
 
-            st.dataframe(
-                pd.DataFrame(stats_data),
-                use_container_width=True,
-                hide_index=True
-            )
+            if df_filtered_suivi2 is not None and not df_filtered_suivi2.empty:
+                st.markdown("---")
+                st.markdown(f"**{id_equip_suivi2} — {point_mesure_suivi2}**")
+                stats_data2 = []
+                for var in variables_selectionnees:
+                    stats_data2.append({
+                        'Variable': variables_disponibles[var],
+                        'Minimum': f"{df_filtered_suivi2[var].min():.2f}",
+                        'Maximum': f"{df_filtered_suivi2[var].max():.2f}",
+                        'Moyenne': f"{df_filtered_suivi2[var].mean():.2f}",
+                        'Écart-type': f"{df_filtered_suivi2[var].std():.2f}"
+                    })
+                st.dataframe(pd.DataFrame(stats_data2), use_container_width=True, hide_index=True)
