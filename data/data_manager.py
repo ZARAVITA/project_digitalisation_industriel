@@ -317,6 +317,190 @@ def sauvegarder_equipement(id_equipement, departement):
 
     except Exception as e:
         return False, f"❌ Erreur lors de l'ajout : {e}"
+#--------------------------------------------------------------------------------+++++++++
+# =============================================================================
+# MODIFICATIONS
+# =============================================================================
+
+def modifier_observation(
+        id_equipement,
+        date_originale,
+        nouvelle_date,
+        observation,
+        recommandation,
+        travaux_notes,
+        analyste,
+        importance=None
+):
+    """
+    Modifie une observation existante
+
+    Args:
+        id_equipement (str): ID de l'équipement
+        date_originale (date): Date originale de l'observation
+        nouvelle_date (date): Nouvelle date de l'observation
+        observation (str): Nouveau texte d'observation
+        recommandation (str): Nouvelle recommandation
+        travaux_notes (str): Nouveaux travaux et notes
+        analyste (str): Nom de l'analyste
+        importance (str, optional): Niveau d'importance
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        from supabase import create_client
+        import os
+
+        # Connexion Supabase
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        supabase = create_client(supabase_url, supabase_key)
+
+        # Convertir les dates en string pour Supabase
+        import pandas as pd
+        date_originale_str = pd.to_datetime(date_originale).strftime('%Y-%m-%d')
+        nouvelle_date_str = pd.to_datetime(nouvelle_date).strftime('%Y-%m-%d')
+
+        # Vérifier que l'observation existe
+        result = supabase.table('observations') \
+            .select('*') \
+            .eq('id_equipement', id_equipement) \
+            .eq('date', date_originale_str) \
+            .execute()
+
+        if not result.data:
+            return False, "⚠️ Observation non trouvée"
+
+        # Si la date a changé, vérifier qu'il n'y a pas déjà une observation à la nouvelle date
+        if date_originale_str != nouvelle_date_str:
+            check_result = supabase.table('observations') \
+                .select('*') \
+                .eq('id_equipement', id_equipement) \
+                .eq('date', nouvelle_date_str) \
+                .execute()
+
+            if check_result.data:
+                return False, f"⚠️ Une observation existe déjà pour cet équipement à la date {nouvelle_date}"
+
+        # Supprimer l'ancienne observation
+        supabase.table('observations') \
+            .delete() \
+            .eq('id_equipement', id_equipement) \
+            .eq('date', date_originale_str) \
+            .execute()
+
+        # Créer la nouvelle observation avec les nouvelles données
+        nouvelle_obs = {
+            'id_equipement': id_equipement,
+            'date': nouvelle_date_str,
+            'observation': observation,
+            'recommandation': recommandation,
+            'travaux_notes': travaux_notes,
+            'analyste': analyste
+        }
+
+        # Ajouter l'importance si fournie
+        if importance:
+            nouvelle_obs['importance'] = importance
+
+        supabase.table('observations').insert(nouvelle_obs).execute()
+
+        return True, "✅ Observation modifiée avec succès"
+
+    except Exception as e:
+        return False, f"❌ Erreur lors de la modification : {e}"
+
+
+def modifier_suivi(
+        id_equipement,
+        point_mesure_original,
+        date_originale,
+        nouvelle_date,
+        vitesse_rpm,
+        twf_rms_g,
+        crest_factor,
+        twf_peak_to_peak_g
+):
+    """
+    Modifie un suivi de mesure existant
+
+    Args:
+        id_equipement (str): ID de l'équipement
+        point_mesure_original (str): Point de mesure original
+        date_originale (date): Date originale du suivi
+        nouvelle_date (date): Nouvelle date du suivi
+        vitesse_rpm (float): Nouvelle vitesse en RPM
+        twf_rms_g (float): Nouvelle valeur TWF RMS en g
+        crest_factor (float): Nouveau Crest Factor
+        twf_peak_to_peak_g (float): Nouvelle valeur TWF Peak-to-Peak en g
+
+    Returns:
+        tuple: (success: bool, message: str)
+    """
+    try:
+        from supabase import create_client
+        import os
+
+        # Connexion Supabase
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        supabase = create_client(supabase_url, supabase_key)
+
+        # Convertir les dates en string pour Supabase
+        import pandas as pd
+        date_originale_str = pd.to_datetime(date_originale).strftime('%Y-%m-%d')
+        nouvelle_date_str = pd.to_datetime(nouvelle_date).strftime('%Y-%m-%d')
+
+        # Vérifier que le suivi existe
+        result = supabase.table('suivi_equipements') \
+            .select('*') \
+            .eq('id_equipement', id_equipement) \
+            .eq('point_mesure', point_mesure_original) \
+            .eq('date', date_originale_str) \
+            .execute()
+
+        if not result.data:
+            return False, "⚠️ Suivi de mesure non trouvé"
+
+        # Si la date a changé, vérifier qu'il n'y a pas déjà un suivi à la nouvelle date
+        if date_originale_str != nouvelle_date_str:
+            check_result = supabase.table('suivi_equipements') \
+                .select('*') \
+                .eq('id_equipement', id_equipement) \
+                .eq('point_mesure', point_mesure_original) \
+                .eq('date', nouvelle_date_str) \
+                .execute()
+
+            if check_result.data:
+                return False, f"⚠️ Un suivi existe déjà pour cet équipement, ce point de mesure et la date {nouvelle_date}"
+
+        # Supprimer l'ancien suivi
+        supabase.table('suivi_equipements') \
+            .delete() \
+            .eq('id_equipement', id_equipement) \
+            .eq('point_mesure', point_mesure_original) \
+            .eq('date', date_originale_str) \
+            .execute()
+
+        # Créer le nouveau suivi avec les nouvelles données
+        nouveau_suivi = {
+            'id_equipement': id_equipement,
+            'point_mesure': point_mesure_original,
+            'date': nouvelle_date_str,
+            'vitesse_rpm': vitesse_rpm,
+            'twf_rms_g': twf_rms_g,
+            'crest_factor': crest_factor,
+            'twf_peak_to_peak_g': twf_peak_to_peak_g
+        }
+
+        supabase.table('suivi_equipements').insert(nouveau_suivi).execute()
+
+        return True, "✅ Suivi de mesure modifié avec succès"
+
+    except Exception as e:
+        return False, f"❌ Erreur lors de la modification : {e}"
+#--------------------------------------------------------------------------------+++++++++
 
 
 # =============================================================================

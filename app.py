@@ -4,7 +4,7 @@ Version refactorisée avec navigation par onglets
 """
 
 import streamlit as st
-from ui import equipements, observations, telechargements, suppressions
+from ui import equipements, observations, telechargements, modifications, suppressions
 from data.data_manager import initialiser_fichiers
 
 # =============================================================================
@@ -39,10 +39,11 @@ def main():
     st.markdown("---")
 
     # Navigation par onglets
-    tab1, tab2, tab3, tab4 = st.tabs([
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
         "📦 Équipements",
         "📝 Observations",
         "📥 Téléchargements",
+        "✏️ Modifications",
         "🗑️ Suppressions"
     ])
 
@@ -54,8 +55,10 @@ def main():
 
     with tab3:
         telechargements.render()
-
     with tab4:
+        modifications.render()
+
+    with tab5:
         suppressions.render()
 
 
