@@ -115,14 +115,16 @@ def charger_equipements():
 # =============================================================================
 # LECTURE DES DONNÉES - OBSERVATIONS
 # =============================================================================
-
+"""
 def charger_observations():
     """
+"""
     Charge l'historique des observations depuis Supabase
 
     Returns:
         DataFrame: Observations avec dates parsées
     """
+"""
     try:
         client = get_supabase_client()
 
@@ -146,19 +148,60 @@ def charger_observations():
     except Exception as e:
         st.error(f"❌ Erreur chargement observations : {e}")
         return pd.DataFrame(columns=OBSERVATIONS_COLS)
+"""
+def charger_observations():
+    """
+    Charge l'historique des observations depuis Supabase (toutes les lignes, sans limite)
 
+    Returns:
+        DataFrame: Observations avec dates parsées
+    """
+    try:
+        client = get_supabase_client()
 
+        all_data = []
+        page_size = 1000
+        offset = 0
+
+        while True:
+            response = client.table("observations").select(
+                "id_equipement, date, observation, recommandation, travaux_notes, analyste, importance"
+            ).order("date", desc=True).range(offset, offset + page_size).execute()
+
+            if not response.data:
+                break
+
+            all_data.extend(response.data)
+
+            if len(response.data) < page_size:
+                break
+
+            offset += page_size
+
+        if all_data:
+            df = pd.DataFrame(all_data)
+            df.rename(columns={"travaux_notes": "Travaux effectués & Notes"}, inplace=True)
+            df['date'] = pd.to_datetime(df['date'])
+            return df[OBSERVATIONS_COLS]
+        else:
+            return pd.DataFrame(columns=OBSERVATIONS_COLS)
+
+    except Exception as e:
+        st.error(f"❌ Erreur chargement observations : {e}")
+        return pd.DataFrame(columns=OBSERVATIONS_COLS)
 # =============================================================================
 # LECTURE DES DONNÉES - SUIVI
 # =============================================================================
-
+"""
 def charger_suivi():
     """
+"""
     Charge les données de suivi des équipements depuis Supabase
 
     Returns:
         DataFrame: Données de suivi avec dates parsées
     """
+"""
     try:
         client = get_supabase_client()
 
@@ -181,7 +224,51 @@ def charger_suivi():
         st.error(f"❌ Erreur chargement suivi : {e}")
         return pd.DataFrame(columns=SUIVI_COLS)
 
+"""
+# =============================================================================
+# LECTURE DES DONNÉES - SUIVI
+# =============================================================================
 
+def charger_suivi():
+    """
+    Charge les données de suivi des équipements depuis Supabase (toutes les lignes, sans limite)
+
+    Returns:
+        DataFrame: Données de suivi avec dates parsées
+    """
+    try:
+        client = get_supabase_client()
+
+        all_data = []
+        page_size = 1000
+        offset = 0
+
+        while True:
+            response = client.table("suivi_equipements").select(
+                "id_equipement, point_mesure, date, vitesse_rpm, "
+                "twf_rms_g, crest_factor, twf_peak_to_peak_g"
+            ).order("date", desc=True).range(offset, offset + page_size - 1).execute()
+
+            if not response.data:
+                break
+
+            all_data.extend(response.data)
+
+            if len(response.data) < page_size:
+                break
+
+            offset += page_size
+
+        if all_data:
+            df = pd.DataFrame(all_data)
+            df['date'] = pd.to_datetime(df['date'])
+            return df[SUIVI_COLS]
+        else:
+            return pd.DataFrame(columns=SUIVI_COLS)
+
+    except Exception as e:
+        st.error(f"❌ Erreur chargement suivi : {e}")
+        return pd.DataFrame(columns=SUIVI_COLS)
 # =============================================================================
 # ÉCRITURE DES DONNÉES - OBSERVATIONS
 # =============================================================================

@@ -533,10 +533,11 @@ def render():
             for var in variables_selectionnees:
                 stats_data.append({
                     'Variable': variables_disponibles[var],
-                    'Minimum': f"{df_filtered_suivi[var].min():.2f}",
-                    'Maximum': f"{df_filtered_suivi[var].max():.2f}",
-                    'Moyenne': f"{df_filtered_suivi[var].mean():.2f}",
-                    'Écart-type': f"{df_filtered_suivi[var].std():.2f}"
+                    'Minimum': f"{df_filtered_suivi[var].min():.3f}",
+                    'Maximum': f"{df_filtered_suivi[var].max():.3f}",
+                    'Moyenne': f"{df_filtered_suivi[var].mean():.3f}",
+                    'Variance': f"{df_filtered_suivi[var].var():.3f}", #===========================================================
+                    'Écart-type': f"{df_filtered_suivi[var].std():.3f}"
                 })
             st.dataframe(pd.DataFrame(stats_data), use_container_width=True, hide_index=True)
 
@@ -547,9 +548,10 @@ def render():
                 for var in variables_selectionnees:
                     stats_data2.append({
                         'Variable': variables_disponibles[var],
-                        'Minimum': f"{df_filtered_suivi2[var].min():.2f}",
-                        'Maximum': f"{df_filtered_suivi2[var].max():.2f}",
-                        'Moyenne': f"{df_filtered_suivi2[var].mean():.2f}",
-                        'Écart-type': f"{df_filtered_suivi2[var].std():.2f}"
+                        'Minimum': f"{df_filtered_suivi2[var].min():.3f}",
+                        'Maximum': f"{df_filtered_suivi2[var].max():.3f}",
+                        'Moyenne': f"{df_filtered_suivi2[var].mean():.3f}",
+                        'Variance': f"{df_filtered_suivi[var].var():.3f}", # ===========================================================
+                        'Écart-type': f"{df_filtered_suivi2[var].std():.3f}"
                     })
                 st.dataframe(pd.DataFrame(stats_data2), use_container_width=True, hide_index=True)
