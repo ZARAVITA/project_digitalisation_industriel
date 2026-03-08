@@ -350,9 +350,9 @@ def render_login_page():
         st.markdown('''
             <div class="footer">
                 <p>🔒 Connexion sécurisée par chiffrement SSL</p>
-                <p>© 2025 Votre Entreprise SA • Tous droits réservés</p>
+                <p>© 2026 Partenariat A&Z SA • Tous droits réservés</p>
                 <p style="font-size: 0.8rem; margin-top: 0.5rem;">
-                    Version 2.0.0 • Développé avec ❤️ au Maroc
+                    Version 2.0.0 • Développé au Maroc
                 </p>
             </div>
         ''', unsafe_allow_html=True)
