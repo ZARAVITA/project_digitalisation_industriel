@@ -1,12 +1,12 @@
-
 """
 Application Streamlit - Gestion des Rapports de Maintenance
 Version avec authentification complète - navigation sidebar
 """
 import streamlit as st
 from ui import equipements, observations, telechargements, modifications, suppressions
+from ui import gestion_utilisateurs
 from data.data_manager import initialiser_fichiers
-from auth.auth import init_session_state, is_authenticated, check_permission
+from auth.auth import init_session_state, is_authenticated, check_permission, is_admin
 from auth.login_page import render_login_page, render_user_info
 from auth.permissions import Permission
 
@@ -43,7 +43,7 @@ def main():
     # Afficher profil (icône top-right + sidebar bas)
     render_user_info()
 
-    # En-tête avec icône profil à droite
+    # En-tête
     col_title, col_profile = st.columns([8, 1])
     with col_title:
         st.title("🏭 MaintenancePro - Gestion Industrielle")
@@ -51,13 +51,14 @@ def main():
     st.markdown("---")
 
     # =============================================================================
-    # NAVIGATION SIDEBAR EN HAUT
+    # NAVIGATION SIDEBAR
     # =============================================================================
 
     with st.sidebar:
         st.markdown("### 📌 Navigation")
         st.markdown("---")
 
+    # Pages standard (filtrées par permission)
     pages = {
         "📦 Équipements":   Permission.VOIR_EQUIPEMENTS,
         "📝 Observations":  Permission.VOIR_OBSERVATIONS,
@@ -71,11 +72,19 @@ def main():
         if check_permission(perm)
     ]
 
+    # Ajouter l'onglet admin uniquement si l'utilisateur est administrateur
+    if is_admin():
+        pages_accessibles.append("👥 Utilisateurs")
+
     if not pages_accessibles:
         st.error("🔒 Aucune page accessible avec votre rôle.")
         st.stop()
 
     if "page_active" not in st.session_state:
+        st.session_state.page_active = pages_accessibles[0]
+
+    # S'assurer que la page active est toujours accessible
+    if st.session_state.page_active not in pages_accessibles:
         st.session_state.page_active = pages_accessibles[0]
 
     with st.sidebar:
@@ -106,6 +115,8 @@ def main():
         modifications.render()
     elif page == "🗑️ Suppressions":
         suppressions.render()
+    elif page == "👥 Utilisateurs":
+        gestion_utilisateurs.render()
 
 
 if __name__ == "__main__":
