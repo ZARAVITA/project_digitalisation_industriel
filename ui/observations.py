@@ -171,7 +171,7 @@ def render():
 
         dept_suivi = st.selectbox(
             "1️⃣ Département",
-            options=departements,
+            options=sorted(df_equipements['departement'].unique()),
             key="dept_select_suivi"
         )
 
@@ -290,20 +290,43 @@ def render():
         # Conversion dates
         df_suivi['date'] = pd.to_datetime(df_suivi['date'], errors='coerce')
 
+        # Construire un mapping id_equipement → département depuis df_equipements
+        equip_to_dept = df_equipements.set_index('id_equipement')['departement'].to_dict()
+
         # ── ÉQUIPEMENT PRINCIPAL ──────────────────────────────────────────────
-        col_f1, col_f2 = st.columns(2)
+        col_f1, col_f2, col_f3 = st.columns(3)
 
         with col_f1:
+            # Départements qui ont des données de suivi
+            depts_avec_suivi = sorted(
+                df_suivi['id_equipement']
+                .map(equip_to_dept)
+                .dropna()
+                .unique()
+            )
+            dept_tendances = st.selectbox(
+                "1️⃣ Département",
+                options=depts_avec_suivi,
+                key="dept_tendances"
+            )
+
+        # Équipements du département sélectionné qui ont des données de suivi
+        equips_dept_tendances = sorted([
+            eq for eq in df_suivi['id_equipement'].unique()
+            if equip_to_dept.get(eq) == dept_tendances
+        ])
+
+        with col_f2:
             id_equip_suivi = st.selectbox(
-                "ID Équipement",
-                options=sorted(df_suivi['id_equipement'].unique()),
+                "2️⃣ Équipement",
+                options=equips_dept_tendances,
                 key="id_equip_tendances"
             )
 
-        with col_f2:
+        with col_f3:
             df_equip_suivi = df_suivi[df_suivi['id_equipement'] == id_equip_suivi]
             point_mesure_suivi = st.selectbox(
-                "Point de mesure",
+                "3️⃣ Point de mesure",
                 options=sorted(df_equip_suivi['point_mesure'].unique()),
                 key="point_mesure_tendances"
             )
@@ -333,19 +356,37 @@ def render():
         point_mesure_suivi2 = None
 
         if ajouter_comparaison:
-            col_c1, col_c2 = st.columns(2)
+            col_c1, col_c2, col_c3 = st.columns(3)
 
             with col_c1:
+                depts_avec_suivi2 = sorted(
+                    df_suivi['id_equipement']
+                    .map(equip_to_dept)
+                    .dropna()
+                    .unique()
+                )
+                dept_tendances2 = st.selectbox(
+                    "1️⃣ Département (comparaison)",
+                    options=depts_avec_suivi2,
+                    key="dept_tendances2"
+                )
+
+            equips_dept_tendances2 = sorted([
+                eq for eq in df_suivi['id_equipement'].unique()
+                if equip_to_dept.get(eq) == dept_tendances2
+            ])
+
+            with col_c2:
                 id_equip_suivi2 = st.selectbox(
-                    "ID Équipement (comparaison)",
-                    options=sorted(df_suivi['id_equipement'].unique()),
+                    "2️⃣ Équipement (comparaison)",
+                    options=equips_dept_tendances2,
                     key="id_equip_tendances2"
                 )
 
-            with col_c2:
+            with col_c3:
                 df_equip_suivi2 = df_suivi[df_suivi['id_equipement'] == id_equip_suivi2]
                 point_mesure_suivi2 = st.selectbox(
-                    "Point de mesure (comparaison)",
+                    "3️⃣ Point de mesure (comparaison)",
                     options=sorted(df_equip_suivi2['point_mesure'].unique()),
                     key="point_mesure_tendances2"
                 )
@@ -536,7 +577,7 @@ def render():
                     'Minimum': f"{df_filtered_suivi[var].min():.3f}",
                     'Maximum': f"{df_filtered_suivi[var].max():.3f}",
                     'Moyenne': f"{df_filtered_suivi[var].mean():.3f}",
-                    'Variance': f"{df_filtered_suivi[var].var():.3f}", #===========================================================
+                    'Variance': f"{df_filtered_suivi[var].var():.3f}",
                     'Écart-type': f"{df_filtered_suivi[var].std():.3f}"
                 })
             st.dataframe(pd.DataFrame(stats_data), use_container_width=True, hide_index=True)
@@ -551,7 +592,7 @@ def render():
                         'Minimum': f"{df_filtered_suivi2[var].min():.3f}",
                         'Maximum': f"{df_filtered_suivi2[var].max():.3f}",
                         'Moyenne': f"{df_filtered_suivi2[var].mean():.3f}",
-                        'Variance': f"{df_filtered_suivi[var].var():.3f}", # ===========================================================
+                        'Variance': f"{df_filtered_suivi[var].var():.3f}",
                         'Écart-type': f"{df_filtered_suivi2[var].std():.3f}"
                     })
                 st.dataframe(pd.DataFrame(stats_data2), use_container_width=True, hide_index=True)

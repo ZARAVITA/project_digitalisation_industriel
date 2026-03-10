@@ -1,5 +1,5 @@
 """
-Onglet Modifications - Modification des observations et suivis
+Onglet Modifications - Modification des observations, suivis et équipements
 """
 
 import streamlit as st
@@ -10,7 +10,8 @@ from data.data_manager import (
     charger_observations,
     charger_suivi,
     modifier_observation,
-    modifier_suivi
+    modifier_suivi,
+    get_supabase_client
 )
 
 
@@ -18,7 +19,7 @@ def render():
     """Affiche l'onglet Modifications"""
 
     st.header("✏️ Modifications")
-    st.caption("Modification des observations et des suivis de mesures")
+    st.caption("Modification des observations, des suivis de mesures et des équipements")
 
     # Chargement données
     df_equipements = charger_equipements()
@@ -445,6 +446,238 @@ def render():
                                     st.error(message)
 
     # =============================================================================
+    # CARTE 3 : MODIFICATION D'UN ÉQUIPEMENT
+    # =============================================================================
+
+    st.markdown("##")
+
+    with st.container(border=True):
+        st.subheader("🔧 Modifier un équipement")
+        st.caption("Modification de l'ID et/ou du département d'un équipement existant")
+
+        # Sélection département HORS formulaire pour réactivité
+        departements_equip = sorted(df_equipements['departement'].unique())
+        dept_equip_select = st.selectbox(
+            "1️⃣ Sélectionner le département",
+            options=departements_equip,
+            key="dept_equip_modif"
+        )
+
+        # Filtrer les équipements du département sélectionné
+        equipements_du_dept = df_equipements[
+            df_equipements['departement'] == dept_equip_select
+        ]
+
+        if equipements_du_dept.empty:
+            st.warning(f"⚠️ Aucun équipement dans le département '{dept_equip_select}'")
+        else:
+            id_equip_modif = st.selectbox(
+                "2️⃣ Équipement à modifier",
+                options=sorted(equipements_du_dept['id_equipement'].tolist()),
+                key="modif_equip_id_select"
+            )
+
+            st.markdown("---")
+            st.subheader("✏️ Nouvelles valeurs")
+
+            # Récupérer les données actuelles de l'équipement
+            equip_actuel = df_equipements[
+                df_equipements['id_equipement'] == id_equip_modif
+            ].iloc[0]
+
+            with st.form("form_modif_equipement"):
+                st.caption("📌 Modifiez les champs souhaités")
+
+                col_id, col_dept = st.columns(2)
+
+                with col_id:
+                    nouvel_id = st.text_input(
+                        "Nouvel ID équipement *",
+                        value=equip_actuel['id_equipement'],
+                        placeholder="Ex: 244-3P-1",
+                        key="form_modif_equip_id"
+                    )
+
+                with col_dept:
+                    nouveau_dept = st.selectbox(
+                        "Nouveau département *",
+                        options=departements_equip,
+                        index=departements_equip.index(equip_actuel['departement']),
+                        key="form_modif_equip_dept"
+                    )
+
+                st.markdown("##")
+
+                col_info, col_btn_equip = st.columns([3, 1])
+
+                with col_info:
+                    st.caption("📌 L'ID et le département sont requis")
+
+                with col_btn_equip:
+                    submitted_equip = st.form_submit_button(
+                        "✅ Enregistrer modifications",
+                        type="primary",
+                        use_container_width=True
+                    )
+
+                if submitted_equip:
+                    nouvel_id = nouvel_id.strip()
+
+                    if not nouvel_id:
+                        st.error("⚠️ L'ID de l'équipement est requis")
+                    elif not nouveau_dept:
+                        st.error("⚠️ Le département est requis")
+                    else:
+                        # Vérifier si rien n'a changé
+                        if (nouvel_id == equip_actuel['id_equipement']
+                                and nouveau_dept == equip_actuel['departement']):
+                            st.warning("⚠️ Aucune modification détectée")
+                        else:
+                            client = get_supabase_client()
+                            ancien_id = equip_actuel['id_equipement']
+                            etape = ""
+
+                            if nouvel_id != ancien_id:
+                                # --- Pré-vérification : nouvel ID déjà pris ? ---
+                                existing = client.table("equipements").select(
+                                    "id_equipement"
+                                ).eq("id_equipement", nouvel_id).execute()
+
+                                if existing.data:
+                                    st.error(f"⚠️ L'ID '{nouvel_id}' est déjà utilisé par un autre équipement")
+                                    st.stop()
+
+                                # --- Compter les données liées (pour vérification post-migration) ---
+                                nb_obs_avant = client.table("observations").select(
+                                    "id_equipement", count="exact"
+                                ).eq("id_equipement", ancien_id).execute().count or 0
+
+                                nb_suivi_avant = client.table("suivi_equipements").select(
+                                    "id_equipement", count="exact"
+                                ).eq("id_equipement", ancien_id).execute().count or 0
+
+                                try:
+                                    # ÉTAPE 1 : Insérer le nouvel équipement
+                                    etape = "insertion du nouvel équipement"
+                                    r1 = client.table("equipements").insert({
+                                        "id_equipement": nouvel_id,
+                                        "departement": nouveau_dept
+                                    }).execute()
+                                    if not r1.data:
+                                        raise Exception("Échec de l'insertion du nouvel équipement")
+
+                                    # ÉTAPE 2 : Migrer les observations
+                                    etape = "migration des observations"
+                                    client.table("observations").update({
+                                        "id_equipement": nouvel_id
+                                    }).eq("id_equipement", ancien_id).execute()
+
+                                    # Vérification : aucune observation ne doit rester sur l'ancien ID
+                                    reste_obs = client.table("observations").select(
+                                        "id_equipement", count="exact"
+                                    ).eq("id_equipement", ancien_id).execute().count or 0
+                                    if reste_obs > 0:
+                                        raise Exception(f"{reste_obs} observation(s) non migrée(s)")
+
+                                    # Vérification : toutes les observations sont bien sur le nouvel ID
+                                    nb_obs_apres = client.table("observations").select(
+                                        "id_equipement", count="exact"
+                                    ).eq("id_equipement", nouvel_id).execute().count or 0
+                                    if nb_obs_apres != nb_obs_avant:
+                                        raise Exception(
+                                            f"Incohérence observations : {nb_obs_avant} avant, "
+                                            f"{nb_obs_apres} après migration"
+                                        )
+
+                                    # ÉTAPE 3 : Migrer les suivis
+                                    etape = "migration des suivis de mesure"
+                                    client.table("suivi_equipements").update({
+                                        "id_equipement": nouvel_id
+                                    }).eq("id_equipement", ancien_id).execute()
+
+                                    # Vérification : aucun suivi ne doit rester sur l'ancien ID
+                                    reste_suivi = client.table("suivi_equipements").select(
+                                        "id_equipement", count="exact"
+                                    ).eq("id_equipement", ancien_id).execute().count or 0
+                                    if reste_suivi > 0:
+                                        raise Exception(f"{reste_suivi} suivi(s) non migré(s)")
+
+                                    # Vérification : tous les suivis sont bien sur le nouvel ID
+                                    nb_suivi_apres = client.table("suivi_equipements").select(
+                                        "id_equipement", count="exact"
+                                    ).eq("id_equipement", nouvel_id).execute().count or 0
+                                    if nb_suivi_apres != nb_suivi_avant:
+                                        raise Exception(
+                                            f"Incohérence suivis : {nb_suivi_avant} avant, "
+                                            f"{nb_suivi_apres} après migration"
+                                        )
+
+                                    # ÉTAPE 4 : Supprimer l'ancien équipement
+                                    # (sûr : plus aucune donnée ne le référence)
+                                    etape = "suppression de l'ancien équipement"
+                                    client.table("equipements").delete().eq(
+                                        "id_equipement", ancien_id
+                                    ).execute()
+
+                                    # Vérification finale : l'ancien ID ne doit plus exister
+                                    verif = client.table("equipements").select(
+                                        "id_equipement"
+                                    ).eq("id_equipement", ancien_id).execute()
+                                    if verif.data:
+                                        raise Exception("L'ancien équipement n'a pas été supprimé")
+
+                                except Exception as e:
+                                    # --- ROLLBACK : nettoyer le nouvel ID inséré ---
+                                    try:
+                                        # Remettre les données sur l'ancien ID si elles ont bougé
+                                        client.table("observations").update({
+                                            "id_equipement": ancien_id
+                                        }).eq("id_equipement", nouvel_id).execute()
+
+                                        client.table("suivi_equipements").update({
+                                            "id_equipement": ancien_id
+                                        }).eq("id_equipement", nouvel_id).execute()
+
+                                        # Supprimer le nouvel équipement créé
+                                        client.table("equipements").delete().eq(
+                                            "id_equipement", nouvel_id
+                                        ).execute()
+
+                                        st.error(
+                                            f"❌ Échec à l'étape « {etape} » : {e}\n\n"
+                                            f"🔄 Rollback effectué — aucune donnée n'a été perdue."
+                                        )
+                                    except Exception as rollback_err:
+                                        st.error(
+                                            f"❌ Échec à l'étape « {etape} » : {e}\n\n"
+                                            f"⚠️ Le rollback a aussi échoué : {rollback_err}\n"
+                                            f"Vérifiez manuellement les données pour les IDs "
+                                            f"'{ancien_id}' et '{nouvel_id}'."
+                                        )
+                                    st.stop()
+
+                            else:
+                                # L'ID ne change pas : simple update du département
+                                try:
+                                    client.table("equipements").update({
+                                        "departement": nouveau_dept
+                                    }).eq("id_equipement", ancien_id).execute()
+                                except Exception as e:
+                                    st.error(f"❌ Erreur lors de la mise à jour du département : {e}")
+                                    st.stop()
+
+                            st.success(
+                                f"✅ Équipement mis à jour : "
+                                f"'{ancien_id}' → '{nouvel_id}' "
+                                f"| Département : '{nouveau_dept}' "
+                                f"({nb_obs_avant if nouvel_id != ancien_id else '–'} obs. et "
+                                f"{nb_suivi_avant if nouvel_id != ancien_id else '–'} suivi(s) migrés)"
+                                if nouvel_id != ancien_id else
+                                f"✅ Département mis à jour pour '{ancien_id}' → '{nouveau_dept}'"
+                            )
+                            st.rerun()
+
+    # =============================================================================
     # INFORMATIONS COMPLÉMENTAIRES
     # =============================================================================
 
@@ -490,6 +723,22 @@ def render():
            - Cliquez sur "Enregistrer modifications"
            - Les modifications sont appliquées immédiatement
            - L'ancien suivi est remplacé
+
+        ---
+
+        **🔧 Modification d'équipement :**
+
+        1. **Sélection :**
+           - Choisissez d'abord le département
+           - Puis l'équipement à modifier
+
+        2. **Modification :**
+           - L'ID de l'équipement peut être modifié (doit être unique)
+           - Le département peut être changé (parmi les départements existants)
+
+        3. **Enregistrement :**
+           - Cliquez sur "Enregistrer modifications"
+           - Les modifications sont appliquées immédiatement
 
         ---
 
