@@ -3,7 +3,7 @@ Application Streamlit - Gestion des Rapports de Maintenance
 Version avec authentification complète - navigation sidebar
 """
 import streamlit as st
-from ui import equipements, observations, telechargements, modifications, suppressions
+from ui import equipements, observations, telechargements, modifications, fiabilite, suppressions
 from ui import gestion_utilisateurs
 from data.data_manager import initialiser_fichiers
 from auth.auth import init_session_state, is_authenticated, check_permission, is_admin
@@ -64,6 +64,7 @@ def main():
         "📝 Observations":  Permission.VOIR_OBSERVATIONS,
         "📥 Exports":       Permission.EXPORTER_DONNEES,
         "✏️ Modifications": Permission.MODIFIER_OBSERVATIONS,
+        "🔧 Fiabilité": Permission.VOIR_OBSERVATIONS,
         "🗑️ Suppressions":  Permission.SUPPRIMER_OBSERVATIONS,
     }
 
@@ -113,6 +114,8 @@ def main():
         telechargements.render()
     elif page == "✏️ Modifications":
         modifications.render()
+    elif page == "🔧 Fiabilité":        # ← AJOUT
+        fiabilite.render()              # ← AJOUT
     elif page == "🗑️ Suppressions":
         suppressions.render()
     elif page == "👥 Utilisateurs":

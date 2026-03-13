@@ -4,3 +4,4 @@ openpyxl
 requests
 supabase>=2.0.0
 plotly
+scipy
