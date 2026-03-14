@@ -337,9 +337,9 @@ def render_login_page():
             st.markdown("""
 **📞 Support Technique**
 
-- **Email :** zaravitamds18@gmail.com
+- **Email :** zaravita@vibra-service.com
 - **Tél :** +212 77 06 362 97
-- **Heures :** Lun-Ven 8h00-17h00
+- **Heures :** Lun-Ven -- 8h00-17h00
 
 *Temps de réponse moyen : 2 heures*
 """)
