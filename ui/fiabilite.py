@@ -187,32 +187,99 @@ def render_filtres_globaux(df_equipements: pd.DataFrame, df_suivi: pd.DataFrame)
 # SECTION — INTERVALLES DE FONCTIONNEMENT
 # =============================================================================
 
-def render_intervalles() -> list:
+def _get_date_min_equipement(df_suivi: pd.DataFrame, id_equip: str) -> date:
+    """
+    Retourne la date de la première mesure disponible pour l'équipement
+    sélectionné dans suivi_equipements.
+    Utilisée comme borne minimale pour la saisie des intervalles.
+
+    Args:
+        df_suivi  : DataFrame complet de suivi_equipements (déjà chargé)
+        id_equip  : ID de l'équipement sélectionné via les filtres globaux
+
+    Returns:
+        date minimale trouvée, ou date(2000, 1, 1) par sécurité si aucune donnée
+    """
+    df_equip = df_suivi[df_suivi["id_equipement"] == id_equip]
+    if df_equip.empty:
+        return date(2000, 1, 1)
+    dates = pd.to_datetime(df_equip["date"], errors="coerce").dropna()
+    if dates.empty:
+        return date(2000, 1, 1)
+    return dates.min().date()
+
+
+def render_intervalles(date_min: date) -> list:
     """
     Gère l'ajout, l'affichage et la suppression des intervalles.
     Clé session_state unique : 'fiab_intervalles'.
+
+    Args:
+        date_min : date minimale autorisée pour les saisies (= première mesure
+                   de l'équipement sélectionné, calculée dynamiquement).
     """
-    key_list = "fiab_intervalles"
+    key_list    = "fiab_intervalles"
+    key_equip   = "fiab_iv_equip_courant"
+
     if key_list not in st.session_state:
         st.session_state[key_list] = []
 
+    # ── Réinitialiser les intervalles si l'équipement a changé ───────────────
+    equip_courant = st.session_state.get("fiab_equipement", "")
+    if st.session_state.get(key_equip) != equip_courant:
+        st.session_state[key_list]   = []
+        st.session_state[key_equip]  = equip_courant
+
     intervalles = st.session_state[key_list]
+
+    # ── Affichage de la date minimale pour information ────────────────────────
+    st.caption(
+        f"📅 Première mesure disponible pour cet équipement : "
+        f"**{date_min.strftime('%d/%m/%Y')}** — les dates ne peuvent pas être antérieures."
+    )
 
     st.markdown("#### ➕ Ajouter un intervalle de bon fonctionnement")
 
     col_d1, col_d2, col_add = st.columns([2, 2, 1])
+
+    # Valeur par défaut intelligente : date_min pour le début, aujourd'hui pour la fin
+    default_debut = date_min
+    default_fin   = date.today()
+
     with col_d1:
-        debut_new = st.date_input("Date début", value=date(2020, 1, 1),
-                                  key="fiab_iv_debut_new")
+        debut_new = st.date_input(
+            "Date début",
+            value=default_debut,
+            min_value=date_min,          # ← date min DYNAMIQUE
+            max_value=date.today(),
+            key="fiab_iv_debut_new"
+        )
     with col_d2:
-        fin_new = st.date_input("Date fin", value=date.today(),
-                                key="fiab_iv_fin_new")
+        fin_new = st.date_input(
+            "Date fin",
+            value=default_fin,
+            min_value=date_min,          # ← date min DYNAMIQUE
+            max_value=date.today(),
+            key="fiab_iv_fin_new"
+        )
     with col_add:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("➕ Ajouter", key="fiab_iv_btn_add",
                      use_container_width=True, type="primary"):
-            if fin_new <= debut_new:
+            # ── Validations ───────────────────────────────────────────────────
+            if debut_new < date_min:
+                st.error(
+                    f"❌ La date de début ({debut_new.strftime('%d/%m/%Y')}) "
+                    f"est antérieure à la première mesure de l'équipement "
+                    f"({date_min.strftime('%d/%m/%Y')})."
+                )
+            elif fin_new <= debut_new:
                 st.error("❌ La date de fin doit être postérieure à la date de début.")
+            elif fin_new < date_min:
+                st.error(
+                    f"❌ La date de fin ({fin_new.strftime('%d/%m/%Y')}) "
+                    f"est antérieure à la première mesure de l'équipement."
+                )
             else:
                 chevauchement = any(
                     not (fin_new <= iv["debut"] or debut_new >= iv["fin"])
@@ -226,6 +293,7 @@ def render_intervalles() -> list:
                     st.session_state[key_list] = intervalles
                     st.rerun()
 
+    # ── Tableau des intervalles ───────────────────────────────────────────────
     if intervalles:
         st.markdown("#### 📋 Liste des intervalles")
         rows = []
@@ -629,7 +697,15 @@ def render_exports(df: pd.DataFrame, parametre: str, param_label: str,
 # =============================================================================
 
 def render_tab_mtbf():
-    """Lit session_state (filtres globaux) — aucun filtre dupliqué."""
+    """
+    Onglet MTBF & Fiabilité.
+    Lit les données depuis session_state (filtres globaux).
+
+    Nouveautés :
+      - date_min dynamique : calculée à partir de MIN(date) dans suivi_equipements
+        pour l'équipement sélectionné → passée à render_intervalles()
+      - choix d'unité pour R(t) : heures ou jours (1 jour = 24 heures)
+    """
     if not st.session_state.get("fiab_selection_ok", False):
         st.info("ℹ️ Sélectionnez un équipement et un paramètre dans les filtres ci-dessus.")
         return
@@ -640,46 +716,101 @@ def render_tab_mtbf():
     parametre    = st.session_state["fiab_parametre"]
     param_label  = st.session_state["fiab_param_label"]
 
-    # Intervalles
+    # ── Date min dynamique : première mesure de l'équipement ─────────────────
+    # On récupère le df_suivi complet depuis session_state (déjà chargé dans render())
+    df_suivi_global = st.session_state.get("fiab_df_suivi_global", pd.DataFrame())
+    date_min = _get_date_min_equipement(df_suivi_global, id_equip)
+
+    # ── Intervalles ───────────────────────────────────────────────────────────
     with st.container(border=True):
         st.subheader("📅 Intervalles de bon fonctionnement")
-        st.caption("Ajoutez chaque période de bon fonctionnement. "
-                   "Nombre de pannes = nombre d'intervalles − 1.")
-        intervalles = render_intervalles()
+        st.caption(
+            "Ajoutez chaque période pendant laquelle l'équipement a fonctionné "
+            "correctement. Nombre de pannes = nombre d'intervalles − 1."
+        )
+        intervalles = render_intervalles(date_min=date_min)
 
-    # Calcul
+    # ── Calcul MTBF ───────────────────────────────────────────────────────────
     resultats = calculer_fiabilite(intervalles) if intervalles else None
 
     if resultats and resultats.get("erreur"):
         st.warning(f"⚠️ {resultats['erreur']}")
 
-    # Saisie t pour R(t)
+    # ── Saisie t pour R(t) + choix d'unité ───────────────────────────────────
     with st.container(border=True):
         st.subheader("🎯 Calcul de la fiabilité R(t)")
-        col_t, col_info = st.columns([1, 2])
-        with col_t:
-            t_heures = st.number_input(
-                "Temps t (heures)",
-                min_value=1.0, max_value=100000.0,
-                value=720.0, step=24.0,
-                key="fiab_t_heures",
-                help="Durée pour laquelle on calcule R(t)"
+
+        col_t, col_unite, col_info = st.columns([1, 1, 2])
+
+        with col_unite:
+            unite_t = st.selectbox(
+                "Unité du temps",
+                options=["heures", "jours"],
+                index=0,
+                key="fiab_rt_unite",
+                help="Choisissez l'unité dans laquelle vous saisissez t. "
+                     "Si « jours » est sélectionné, la conversion t × 24 est "
+                     "appliquée automatiquement avant le calcul."
             )
+
+        # Paramètres d'affichage selon l'unité choisie
+        if unite_t == "heures":
+            label_t    = "Temps t (heures)"
+            val_defaut = 720.0      # 30 jours en heures
+            step_t     = 24.0
+            max_t      = 100_000.0
+        else:
+            label_t    = "Temps t (jours)"
+            val_defaut = 30.0
+            step_t     = 1.0
+            max_t      = 4_000.0   # ≈ 11 ans en jours
+
+        with col_t:
+            t_saisi = st.number_input(
+                label_t,
+                min_value=1.0,
+                max_value=max_t,
+                value=val_defaut,
+                step=step_t,
+                key="fiab_t_saisi",
+                help=(
+                    "Durée pour laquelle on calcule R(t). "
+                    "Les calculs internes sont toujours en heures "
+                    "(λ en pannes/heure)."
+                )
+            )
+
+        # Conversion en heures pour tous les calculs (λ est en pannes/heure)
+        if unite_t == "jours":
+            t_heures = t_saisi * 24.0
+            label_t_display = f"{t_saisi:.0f} jours ({t_heures:.0f}h)"
+        else:
+            t_heures        = t_saisi
+            label_t_display = f"{t_heures:.0f}h"
+
         if resultats and not resultats.get("erreur") and resultats.get("lambda"):
-            r_t = fiabilite_rt(resultats["lambda"], t_heures)
+            r_t       = fiabilite_rt(resultats["lambda"], t_heures)
+            indicateur = couleur_fiabilite(r_t)
             with col_info:
                 st.markdown(f"""
-                <div style="background:#f8f9fa;border-radius:10px;padding:16px;margin-top:8px;">
-                    <span style="font-size:1.1rem;">{couleur_fiabilite(r_t)}&nbsp;
-                    Pour <b>t = {t_heures:.0f}h</b>, la probabilité que l'équipement
-                    fonctionne sans défaillance est :</span><br>
+                <div style="background:#f8f9fa;border-radius:10px;
+                            padding:16px;margin-top:8px;">
+                    <span style="font-size:1.05rem;">
+                        {indicateur}&nbsp;
+                        Pour <b>t = {label_t_display}</b>, la probabilité que
+                        l'équipement fonctionne sans défaillance est :
+                    </span><br>
                     <span style="font-size:2rem;font-weight:800;color:#2980b9;">
                         R(t) = {r_t * 100:.2f}%
+                    </span><br>
+                    <span style="font-size:0.8rem;color:#888;">
+                        λ = {resultats['lambda']:.4e} pannes/h —
+                        calcul : exp(−{resultats['lambda']:.4e} × {t_heures:.1f})
                     </span>
                 </div>
                 """, unsafe_allow_html=True)
 
-    # Dashboard KPI + récapitulatif + courbe R(t)
+    # ── Dashboard KPI + récapitulatif + courbe R(t) ───────────────────────────
     if resultats and not resultats.get("erreur"):
         with st.container(border=True):
             st.subheader("📊 Tableau de bord — Indicateurs de fiabilité")
@@ -698,7 +829,9 @@ def render_tab_mtbf():
                         "MTBF",
                         "MTBF (heures)",
                         "Taux de défaillance λ",
-                        f"Fiabilité R({t_heures:.0f}h)",
+                        f"t saisi",
+                        f"t converti (heures)",
+                        f"Fiabilité R(t)",
                     ],
                     "Valeur": [
                         f"{resultats['temps_total_jours']:.1f} jours",
@@ -707,6 +840,8 @@ def render_tab_mtbf():
                         f"{resultats['mtbf_jours']:.1f} jours" if resultats.get("mtbf_jours") else "—",
                         f"{resultats['mtbf_heures']:.1f} h"    if resultats.get("mtbf_heures") else "—",
                         f"{lam:.4e} pannes/h"                  if lam else "—",
+                        f"{t_saisi:.1f} {unite_t}",
+                        f"{t_heures:.1f} h",
                         f"{fiabilite_rt(lam, t_heures)*100:.2f}%" if lam else "—",
                     ]
                 }
@@ -716,7 +851,7 @@ def render_tab_mtbf():
                 if resultats.get("lambda") and resultats.get("mtbf_heures"):
                     render_courbe_fiabilite(resultats["lambda"], resultats["mtbf_heures"])
 
-        # Exports
+        # ── Exports ───────────────────────────────────────────────────────────
         with st.container(border=True):
             render_exports(df_filtered, parametre, param_label,
                            resultats, intervalles, id_equip, point_mesure)
@@ -916,6 +1051,10 @@ def render():
     if df_equipements.empty or df_suivi.empty:
         st.error("⚠️ Données insuffisantes. Vérifiez la connexion à la base de données.")
         return
+
+    # Stocker df_suivi complet en session_state pour que render_tab_mtbf()
+    # puisse calculer la date min dynamique sans re-charger depuis Supabase.
+    st.session_state["fiab_df_suivi_global"] = df_suivi
 
     # Filtres globaux — une seule fois — résultats dans session_state
     render_filtres_globaux(df_equipements, df_suivi)
