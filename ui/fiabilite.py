@@ -4,11 +4,19 @@ Calcul MTBF, taux de défaillance, courbes R(t), statistiques descriptives
 
 Structure :
     render()
-        └── render_filtres_globaux()      ← filtres uniques en haut (session_state)
-        └── st.tabs([ MTBF | Tendances | Statistiques ])
-                ├── render_tab_mtbf()
-                ├── render_tab_tendances()
-                └── render_tab_stats()
+        └── render_filtres_globaux()          ← 3 filtres : Dept | Équip | Point mesure
+        └── st.tabs([MTBF | Tendances | Stats])
+                ├── render_tab_mtbf()         ← intervalles + MTBF + R(t) + dashboard
+                ├── render_tab_tendances()    ← tous les paramètres + filtre plage + bouton détails
+                └── render_tab_stats()        ← stats descriptives par paramètre
+
+Changements v4 :
+  - Filtre "Paramètre" SUPPRIMÉ des filtres globaux (inutile pour MTBF)
+  - render_tab_tendances() affiche TOUS les paramètres disponibles en graphiques empilés
+  - Filtre plage de valeurs : choisir le paramètre de référence + min/max
+    → filtre les lignes du DataFrame, s'applique à TOUS les graphiques de tendances
+  - Bouton "📊 Analyse détaillée" sous chaque courbe de tendance
+    → affiche histogramme + boxplot + KDE sur TOUTES les données (sans filtre plage)
 """
 
 import streamlit as st
@@ -31,13 +39,21 @@ VARIABLES_DISPONIBLES = {
     "twf_peak_to_peak_g": "TWF Peak-to-Peak (g)",
 }
 
+# Palette de couleurs par paramètre pour cohérence visuelle
+COULEURS_PARAMETRES = {
+    "vitesse_rpm":        "#2980b9",   # bleu
+    "twf_rms_g":          "#e74c3c",   # rouge
+    "crest_factor":       "#f39c12",   # orange
+    "twf_peak_to_peak_g": "#27ae60",   # vert
+}
+
 
 # =============================================================================
 # UTILITAIRES — CALCULS DE FIABILITÉ
 # =============================================================================
 
 def calculer_duree_jours(debut: date, fin: date) -> float:
-    """Retourne la durée en jours entre deux dates."""
+    """Retourne la durée en jours entre deux dates (toujours ≥ 0)."""
     return max((fin - debut).days, 0)
 
 
@@ -46,17 +62,18 @@ def calculer_fiabilite(intervalles: list) -> dict:
     Calcule les indicateurs de fiabilité à partir d'une liste d'intervalles.
 
     Args:
-        intervalles: liste de {"debut": date, "fin": date}
+        intervalles : liste de {"debut": date, "fin": date}
 
     Returns:
-        dict avec MTBF, lambda, nombre_pannes, temps_total_h, temps_total_j
+        dict avec MTBF (jours/heures), lambda, nombre_pannes, temps_total,
+        durees_jours, erreur (None si tout ok)
     """
     if not intervalles:
         return None
 
-    durees_jours = [calculer_duree_jours(iv["debut"], iv["fin"]) for iv in intervalles]
-    temps_total_jours = sum(durees_jours)
-    nombre_pannes = max(len(intervalles) - 1, 0)
+    durees_jours      = [calculer_duree_jours(iv["debut"], iv["fin"]) for iv in intervalles]
+    temps_total_jours  = sum(durees_jours)
+    nombre_pannes      = max(len(intervalles) - 1, 0)
 
     if nombre_pannes == 0 or temps_total_jours == 0:
         return {
@@ -67,12 +84,15 @@ def calculer_fiabilite(intervalles: list) -> dict:
             "mtbf_heures":        None,
             "lambda":             None,
             "durees_jours":       durees_jours,
-            "erreur": "Pas assez de pannes pour calculer le MTBF (minimum 2 intervalles requis)"
+            "erreur": (
+                "Pas assez de pannes pour calculer le MTBF "
+                "(minimum 2 intervalles requis)"
+            ),
         }
 
     mtbf_jours  = temps_total_jours / nombre_pannes
     mtbf_heures = mtbf_jours * 24
-    lam         = 1.0 / mtbf_heures
+    lam         = 1.0 / mtbf_heures   # pannes / heure
 
     return {
         "temps_total_jours":  temps_total_jours,
@@ -82,17 +102,17 @@ def calculer_fiabilite(intervalles: list) -> dict:
         "mtbf_heures":        mtbf_heures,
         "lambda":             lam,
         "durees_jours":       durees_jours,
-        "erreur":             None
+        "erreur":             None,
     }
 
 
 def fiabilite_rt(lam: float, t_heures: float) -> float:
-    """R(t) = exp(-λ * t)"""
-    return np.exp(-lam * t_heures)
+    """R(t) = exp(−λ · t)  avec λ en pannes/heure et t en heures."""
+    return float(np.exp(-lam * t_heures))
 
 
 def couleur_fiabilite(r: float) -> str:
-    """Indicateur couleur selon le niveau de fiabilité."""
+    """Indicateur couleur 🟢/🟡/🔴 selon le niveau de fiabilité R(t)."""
     if r >= 0.80:
         return "🟢"
     elif r >= 0.50:
@@ -101,33 +121,56 @@ def couleur_fiabilite(r: float) -> str:
 
 
 # =============================================================================
-# FILTRES GLOBAUX
-# Affichés une seule fois sous le titre.
-# Résultats stockés dans st.session_state pour partage entre les 3 onglets.
+# UTILITAIRES — DATE MIN ÉQUIPEMENT
+# =============================================================================
+
+def _get_date_min_equipement(df_suivi: pd.DataFrame, id_equip: str) -> date:
+    """
+    Retourne la date de la première mesure disponible pour l'équipement
+    (= borne minimale pour la saisie des intervalles MTBF).
+    """
+    df_e  = df_suivi[df_suivi["id_equipement"] == id_equip]
+    dates = pd.to_datetime(df_e["date"], errors="coerce").dropna()
+    return dates.min().date() if not dates.empty else date(2000, 1, 1)
+
+
+# =============================================================================
+# FILTRES GLOBAUX — 3 FILTRES SEULEMENT (Dept | Équip | Point de mesure)
+# Le paramètre N'EST PLUS un filtre global.
+# Résultats stockés dans session_state pour partage entre les 3 onglets.
 # =============================================================================
 
 def render_filtres_globaux(df_equipements: pd.DataFrame, df_suivi: pd.DataFrame):
     """
-    Affiche les 4 filtres en cascade et stocke dans session_state :
-        fiab_departement, fiab_equipement, fiab_point_mesure,
-        fiab_parametre, fiab_df_filtered, fiab_param_label, fiab_selection_ok
+    Affiche les 3 filtres en cascade et stocke dans session_state :
+        fiab_departement   → département sélectionné
+        fiab_equipement    → ID équipement sélectionné
+        fiab_point_mesure  → point de mesure sélectionné
+        fiab_df_filtered   → DataFrame filtré (toutes colonnes, toutes variables)
+        fiab_selection_ok  → True si des données existent pour la sélection
     """
     with st.container(border=True):
-        st.markdown("#### 🔍 Sélection de l'équipement et du paramètre")
-        col1, col2, col3, col4 = st.columns(4)
+        st.markdown("#### 🔍 Sélection de l'équipement")
+        col1, col2, col3 = st.columns(3)
 
         # ── 1. Département ────────────────────────────────────────────────────
         with col1:
             departements = sorted(df_equipements["departement"].dropna().unique())
-            dept_idx = 0
+            dept_idx     = 0
             if st.session_state.get("fiab_departement") in departements:
                 dept_idx = departements.index(st.session_state["fiab_departement"])
-            dept = st.selectbox("1️⃣ Département", departements,
-                                index=dept_idx, key="fiab_departement")
+            dept = st.selectbox(
+                "1️⃣ Département", departements,
+                index=dept_idx, key="fiab_departement"
+            )
 
         # ── 2. ID Équipement ──────────────────────────────────────────────────
-        equips_dept   = df_equipements[df_equipements["departement"] == dept]["id_equipement"].tolist()
-        equips_valides = sorted([e for e in equips_dept if e in df_suivi["id_equipement"].unique()])
+        equips_dept    = df_equipements[
+            df_equipements["departement"] == dept
+        ]["id_equipement"].tolist()
+        equips_valides = sorted(
+            [e for e in equips_dept if e in df_suivi["id_equipement"].unique()]
+        )
 
         with col2:
             if not equips_valides:
@@ -137,8 +180,10 @@ def render_filtres_globaux(df_equipements: pd.DataFrame, df_suivi: pd.DataFrame)
             eq_idx = 0
             if st.session_state.get("fiab_equipement") in equips_valides:
                 eq_idx = equips_valides.index(st.session_state["fiab_equipement"])
-            id_equip = st.selectbox("2️⃣ ID Équipement", equips_valides,
-                                    index=eq_idx, key="fiab_equipement")
+            id_equip = st.selectbox(
+                "2️⃣ ID Équipement", equips_valides,
+                index=eq_idx, key="fiab_equipement"
+            )
 
         # ── 3. Point de mesure ────────────────────────────────────────────────
         df_equip = df_suivi[df_suivi["id_equipement"] == id_equip]
@@ -152,32 +197,22 @@ def render_filtres_globaux(df_equipements: pd.DataFrame, df_suivi: pd.DataFrame)
             pm_idx = 0
             if st.session_state.get("fiab_point_mesure") in points:
                 pm_idx = points.index(st.session_state["fiab_point_mesure"])
-            point_mesure = st.selectbox("3️⃣ Point de mesure", points,
-                                        index=pm_idx, key="fiab_point_mesure")
-
-        # ── 4. Paramètre ──────────────────────────────────────────────────────
-        with col4:
-            param_keys = list(VARIABLES_DISPONIBLES.keys())
-            p_idx = 0
-            if st.session_state.get("fiab_parametre") in param_keys:
-                p_idx = param_keys.index(st.session_state["fiab_parametre"])
-            parametre = st.selectbox(
-                "4️⃣ Paramètre",
-                options=param_keys,
-                format_func=lambda k: VARIABLES_DISPONIBLES[k],
-                index=p_idx,
-                key="fiab_parametre"
+            point_mesure = st.selectbox(
+                "3️⃣ Point de mesure", points,
+                index=pm_idx, key="fiab_point_mesure"
             )
 
-    # ── Construction du DataFrame filtré ─────────────────────────────────────
+    # ── DataFrame filtré (toutes les colonnes — toutes variables) ─────────────
     df_filtered = df_equip[df_equip["point_mesure"] == point_mesure].copy()
     df_filtered["date"] = pd.to_datetime(df_filtered["date"], errors="coerce")
     df_filtered = df_filtered.sort_values("date")
 
-    # Stockage partagé
-    st.session_state["fiab_df_filtered"] = df_filtered
-    st.session_state["fiab_param_label"] = VARIABLES_DISPONIBLES[parametre]
-    st.session_state["fiab_selection_ok"] = not df_filtered.empty
+    # Garder seulement les colonnes qui existent réellement dans df_suivi
+    cols_variables = [c for c in VARIABLES_DISPONIBLES.keys() if c in df_filtered.columns]
+
+    st.session_state["fiab_df_filtered"]   = df_filtered
+    st.session_state["fiab_cols_variables"] = cols_variables   # paramètres disponibles
+    st.session_state["fiab_selection_ok"]  = not df_filtered.empty
 
     if df_filtered.empty:
         st.warning("⚠️ Aucune donnée pour cette sélection.")
@@ -187,78 +222,51 @@ def render_filtres_globaux(df_equipements: pd.DataFrame, df_suivi: pd.DataFrame)
 # SECTION — INTERVALLES DE FONCTIONNEMENT
 # =============================================================================
 
-def _get_date_min_equipement(df_suivi: pd.DataFrame, id_equip: str) -> date:
-    """
-    Retourne la date de la première mesure disponible pour l'équipement
-    sélectionné dans suivi_equipements.
-    Utilisée comme borne minimale pour la saisie des intervalles.
-
-    Args:
-        df_suivi  : DataFrame complet de suivi_equipements (déjà chargé)
-        id_equip  : ID de l'équipement sélectionné via les filtres globaux
-
-    Returns:
-        date minimale trouvée, ou date(2000, 1, 1) par sécurité si aucune donnée
-    """
-    df_equip = df_suivi[df_suivi["id_equipement"] == id_equip]
-    if df_equip.empty:
-        return date(2000, 1, 1)
-    dates = pd.to_datetime(df_equip["date"], errors="coerce").dropna()
-    if dates.empty:
-        return date(2000, 1, 1)
-    return dates.min().date()
-
-
 def render_intervalles(date_min: date) -> list:
     """
-    Gère l'ajout, l'affichage et la suppression des intervalles.
-    Clé session_state unique : 'fiab_intervalles'.
+    Gère l'ajout, l'affichage et la suppression des intervalles MTBF.
+    Clés session_state : 'fiab_intervalles', 'fiab_iv_equip_courant'.
+    Réinitialise automatiquement si l'équipement change.
 
     Args:
-        date_min : date minimale autorisée pour les saisies (= première mesure
-                   de l'équipement sélectionné, calculée dynamiquement).
+        date_min : première mesure de l'équipement → borne minimale des date_input.
     """
-    key_list    = "fiab_intervalles"
-    key_equip   = "fiab_iv_equip_courant"
+    key_list  = "fiab_intervalles"
+    key_equip = "fiab_iv_equip_courant"
 
     if key_list not in st.session_state:
         st.session_state[key_list] = []
 
-    # ── Réinitialiser les intervalles si l'équipement a changé ───────────────
+    # Réinitialisation si l'équipement a changé
     equip_courant = st.session_state.get("fiab_equipement", "")
     if st.session_state.get(key_equip) != equip_courant:
-        st.session_state[key_list]   = []
-        st.session_state[key_equip]  = equip_courant
+        st.session_state[key_list]  = []
+        st.session_state[key_equip] = equip_courant
 
     intervalles = st.session_state[key_list]
 
-    # ── Affichage de la date minimale pour information ────────────────────────
     st.caption(
         f"📅 Première mesure disponible pour cet équipement : "
-        f"**{date_min.strftime('%d/%m/%Y')}** — les dates ne peuvent pas être antérieures."
+        f"**{date_min.strftime('%d/%m/%Y')}** — "
+        f"les dates ne peuvent pas être antérieures à cette date."
     )
 
     st.markdown("#### ➕ Ajouter un intervalle de bon fonctionnement")
 
     col_d1, col_d2, col_add = st.columns([2, 2, 1])
-
-    # Valeur par défaut intelligente : date_min pour le début, aujourd'hui pour la fin
-    default_debut = date_min
-    default_fin   = date.today()
-
     with col_d1:
         debut_new = st.date_input(
             "Date début",
-            value=default_debut,
-            min_value=date_min,          # ← date min DYNAMIQUE
+            value=date_min,
+            min_value=date_min,
             max_value=date.today(),
             key="fiab_iv_debut_new"
         )
     with col_d2:
         fin_new = st.date_input(
             "Date fin",
-            value=default_fin,
-            min_value=date_min,          # ← date min DYNAMIQUE
+            value=date.today(),
+            min_value=date_min,
             max_value=date.today(),
             key="fiab_iv_fin_new"
         )
@@ -266,20 +274,13 @@ def render_intervalles(date_min: date) -> list:
         st.markdown("<br>", unsafe_allow_html=True)
         if st.button("➕ Ajouter", key="fiab_iv_btn_add",
                      use_container_width=True, type="primary"):
-            # ── Validations ───────────────────────────────────────────────────
             if debut_new < date_min:
                 st.error(
-                    f"❌ La date de début ({debut_new.strftime('%d/%m/%Y')}) "
-                    f"est antérieure à la première mesure de l'équipement "
-                    f"({date_min.strftime('%d/%m/%Y')})."
+                    f"❌ Date de début ({debut_new.strftime('%d/%m/%Y')}) antérieure "
+                    f"à la première mesure ({date_min.strftime('%d/%m/%Y')})."
                 )
             elif fin_new <= debut_new:
                 st.error("❌ La date de fin doit être postérieure à la date de début.")
-            elif fin_new < date_min:
-                st.error(
-                    f"❌ La date de fin ({fin_new.strftime('%d/%m/%Y')}) "
-                    f"est antérieure à la première mesure de l'équipement."
-                )
             else:
                 chevauchement = any(
                     not (fin_new <= iv["debut"] or debut_new >= iv["fin"])
@@ -293,19 +294,18 @@ def render_intervalles(date_min: date) -> list:
                     st.session_state[key_list] = intervalles
                     st.rerun()
 
-    # ── Tableau des intervalles ───────────────────────────────────────────────
     if intervalles:
         st.markdown("#### 📋 Liste des intervalles")
         rows = []
         for i, iv in enumerate(intervalles):
-            duree = calculer_duree_jours(iv["debut"], iv["fin"])
+            d = calculer_duree_jours(iv["debut"], iv["fin"])
             rows.append({
-                "#":               i + 1,
-                "Date début":      iv["debut"].strftime("%d/%m/%Y"),
-                "Date fin":        iv["fin"].strftime("%d/%m/%Y"),
-                "Durée (jours)":   duree,
-                "Durée (mois)":    round(duree / 30.44, 1),
-                "Durée (années)":  round(duree / 365.25, 2),
+                "#":              i + 1,
+                "Date début":     iv["debut"].strftime("%d/%m/%Y"),
+                "Date fin":       iv["fin"].strftime("%d/%m/%Y"),
+                "Durée (jours)":  d,
+                "Durée (mois)":   round(d / 30.44, 1),
+                "Durée (années)": round(d / 365.25, 2),
             })
         st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
@@ -327,7 +327,8 @@ def render_intervalles(date_min: date) -> list:
                 st.session_state[key_list] = []
                 st.rerun()
     else:
-        st.info("ℹ️ Aucun intervalle ajouté. Ajoutez au moins 2 intervalles pour calculer le MTBF.")
+        st.info("ℹ️ Aucun intervalle ajouté. "
+                "Ajoutez au moins 2 intervalles pour calculer le MTBF.")
 
     return intervalles
 
@@ -351,19 +352,15 @@ def render_kpi_cards(resultats: dict, t_heures: float):
         with col:
             st.markdown(f"""
             <div style="
-                background: linear-gradient(135deg,{couleur}15 0%,{couleur}08 100%);
-                border: 1.5px solid {couleur}40;
-                border-radius: 12px;
-                padding: 16px 12px;
-                text-align: center;
-                min-height: 110px;
-            ">
-                <div style="font-size:1.6rem;margin-bottom:4px;">{icone}</div>
-                <div style="font-size:0.72rem;color:#888;font-weight:600;
-                    text-transform:uppercase;letter-spacing:0.05em;">{titre}</div>
-                <div style="font-size:1.4rem;font-weight:800;color:{couleur};
-                    margin:4px 0;">{valeur}</div>
-                <div style="font-size:0.72rem;color:#aaa;">{unite}</div>
+                background:linear-gradient(135deg,{couleur}15 0%,{couleur}08 100%);
+                border:1.5px solid {couleur}40;border-radius:12px;
+                padding:16px 12px;text-align:center;min-height:110px;">
+              <div style="font-size:1.6rem;margin-bottom:4px;">{icone}</div>
+              <div style="font-size:0.72rem;color:#888;font-weight:600;
+                text-transform:uppercase;letter-spacing:0.05em;">{titre}</div>
+              <div style="font-size:1.4rem;font-weight:800;color:{couleur};
+                margin:4px 0;">{valeur}</div>
+              <div style="font-size:0.72rem;color:#aaa;">{unite}</div>
             </div>""", unsafe_allow_html=True)
 
     mc = ("#2ecc71" if mtbf_j and mtbf_j >= 365
@@ -371,14 +368,14 @@ def render_kpi_cards(resultats: dict, t_heures: float):
     rc = ("#2ecc71" if r_t and r_t >= 0.80
           else ("#f39c12" if r_t and r_t >= 0.50 else "#e74c3c"))
 
-    card(col1, "MTBF",      f"{mtbf_j:.1f}" if mtbf_j else "—", "jours",          "⚙️", mc)
-    card(col2, "MTBF",      f"{mtbf_h:.0f}" if mtbf_h else "—", "heures",          "🕐", mc)
-    card(col3, "Taux λ",    f"{lam:.2e}"    if lam    else "—", "pannes/heure",    "📉", "#9b59b6")
+    card(col1, "MTBF",        f"{mtbf_j:.1f}" if mtbf_j else "—", "jours",          "⚙️", mc)
+    card(col2, "MTBF",        f"{mtbf_h:.0f}" if mtbf_h else "—", "heures",          "🕐", mc)
+    card(col3, "Taux λ",      f"{lam:.2e}"    if lam    else "—", "pannes/heure",    "📉", "#9b59b6")
     card(col4, f"R({t_heures:.0f}h)",
          f"{r_t*100:.1f}%" if r_t is not None else "—",
-         f"t={t_heures:.0f}h", "🎯", rc)
-    card(col5, "Pannes",    str(n_pan),                          "défaillances",   "⚠️", "#e74c3c")
-    card(col6, "Temps total", f"{t_tot_j:.0f}",                 "jours de fonct.", "📅", "#3498db")
+         f"t = {t_heures:.0f}h", "🎯", rc)
+    card(col5, "Pannes",      str(n_pan),                           "défaillances",  "⚠️", "#e74c3c")
+    card(col6, "Temps total", f"{t_tot_j:.0f}",                    "jours fonct.",   "📅", "#3498db")
 
 
 # =============================================================================
@@ -386,16 +383,16 @@ def render_kpi_cards(resultats: dict, t_heures: float):
 # =============================================================================
 
 def render_courbe_fiabilite(lam: float, mtbf_h: float):
-    """Courbe R(t) = exp(-λt). Key unique : fiab_fig_rt"""
+    """Courbe R(t) = exp(−λt) avec zones colorées et repère MTBF."""
     t_max  = mtbf_h * 3
     t_vals = np.linspace(0, t_max, 500)
     r_vals = np.exp(-lam * t_vals)
 
     fig = go.Figure()
     fig.add_hrect(y0=0.80, y1=1.0,  fillcolor="rgba(46,204,113,0.1)",  line_width=0,
-                  annotation_text="Bon (>80%)",     annotation_position="right")
+                  annotation_text="Bon (>80%)",      annotation_position="right")
     fig.add_hrect(y0=0.50, y1=0.80, fillcolor="rgba(243,156,18,0.1)",  line_width=0,
-                  annotation_text="Attention",      annotation_position="right")
+                  annotation_text="Attention",       annotation_position="right")
     fig.add_hrect(y0=0,    y1=0.50, fillcolor="rgba(231,76,60,0.1)",   line_width=0,
                   annotation_text="Critique (<50%)", annotation_position="right")
     fig.add_trace(go.Scatter(
@@ -406,7 +403,8 @@ def render_courbe_fiabilite(lam: float, mtbf_h: float):
     fig.add_vline(x=mtbf_h, line_dash="dash", line_color="#e74c3c",
                   annotation_text=f"MTBF = {mtbf_h:.0f}h (R≈36.8%)",
                   annotation_position="top right")
-    fig.add_hline(y=np.exp(-1), line_dash="dot", line_color="#e74c3c", line_width=1)
+    fig.add_hline(y=float(np.exp(-1)), line_dash="dot",
+                  line_color="#e74c3c", line_width=1)
     fig.update_layout(
         title="📈 Courbe de fiabilité R(t) — Loi exponentielle",
         xaxis_title="Temps t (heures)",
@@ -419,149 +417,184 @@ def render_courbe_fiabilite(lam: float, mtbf_h: float):
 
 
 # =============================================================================
-# SECTION — GRAPHIQUES ANALYSE
-# tab_prefix garantit des keys uniques par onglet : "tend" ou "stat"
+# SECTION — GRAPHIQUE TENDANCE D'UN PARAMÈTRE (utilisé par Visualisation)
 # =============================================================================
 
-def render_graphiques_analyse(df: pd.DataFrame, parametre: str, param_label: str,
-                               id_equip: str, point_mesure: str,
-                               val_min: float = None, val_max: float = None,
-                               tab_prefix: str = "tab"):
+def _fig_tendance(df_plot: pd.DataFrame, parametre: str,
+                  param_label: str, id_equip: str, point_mesure: str) -> go.Figure:
     """
-    Graphiques Plotly : évolution temporelle, histogramme, boxplot, KDE.
-    tab_prefix garantit que chaque st.plotly_chart a un key unique dans la page.
+    Construit et retourne la figure Plotly d'évolution temporelle pour
+    un paramètre donné : données brutes + tendance linéaire + moyenne mobile 5 pts.
     """
-    serie_raw = df[parametre].dropna()
-    df_plot   = df[["date", parametre]].dropna().sort_values("date")
+    couleur = COULEURS_PARAMETRES.get(parametre, "#2980b9")
+    fig     = go.Figure()
 
-    if val_min is not None and val_max is not None:
-        df_plot = df_plot[(df_plot[parametre] >= val_min) & (df_plot[parametre] <= val_max)]
-        serie   = df_plot[parametre]
-    else:
-        serie = serie_raw
-
-    if df_plot.empty or serie.empty:
-        st.warning("⚠️ Aucune donnée après application du filtre.")
-        return
-
-    # ── Fig 1 : Évolution temporelle + tendance + moyenne mobile ─────────────
-    fig1 = go.Figure()
-    fig1.add_trace(go.Scatter(
+    fig.add_trace(go.Scatter(
         x=df_plot["date"], y=df_plot[parametre],
         mode="lines+markers", name=param_label,
-        line=dict(color="#2980b9", width=2), marker=dict(size=5)
+        line=dict(color=couleur, width=2), marker=dict(size=5)
     ))
+
     if len(df_plot) >= 3:
         x_num  = (df_plot["date"] - df_plot["date"].min()).dt.days.values
         coeffs = np.polyfit(x_num, df_plot[parametre].values, 1)
-        fig1.add_trace(go.Scatter(
+        fig.add_trace(go.Scatter(
             x=df_plot["date"], y=np.polyval(coeffs, x_num),
             mode="lines", name="Tendance linéaire",
             line=dict(color="#e74c3c", width=2, dash="dash")
         ))
+
     if len(df_plot) >= 5:
-        fig1.add_trace(go.Scatter(
+        fig.add_trace(go.Scatter(
             x=df_plot["date"],
             y=df_plot[parametre].rolling(5, center=True).mean(),
             mode="lines", name="Moyenne mobile (5 pts)",
             line=dict(color="#2ecc71", width=2, dash="dot")
         ))
-    fig1.update_layout(
-        title=f"📊 Évolution temporelle — {id_equip} | {point_mesure} | {param_label}",
+
+    fig.update_layout(
+        title=f"📊 {param_label} — {id_equip} | {point_mesure}",
         xaxis_title="Date", yaxis_title=param_label,
-        hovermode="x unified", height=420,
+        hovermode="x unified", height=380,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
     )
-    st.plotly_chart(fig1, use_container_width=True,
-                    key=f"fiab_{tab_prefix}_fig_evolution")
+    return fig
 
-    # ── Fig 2 + Fig 3 : Histogramme & Boxplot ────────────────────────────────
-    col_g2, col_g3 = st.columns(2)
 
-    with col_g2:
-        fig2 = go.Figure()
-        fig2.add_trace(go.Histogram(
-            x=serie, nbinsx=30,
-            marker_color="#3498db",
-            marker_line=dict(color="#2980b9", width=1),
-            opacity=0.85, name=param_label
-        ))
-        fig2.add_vline(x=serie.mean(), line_dash="dash", line_color="#e74c3c",
-                       annotation_text=f"Moy = {serie.mean():.3f}",
-                       annotation_position="top right")
-        fig2.add_vline(x=serie.median(), line_dash="dot", line_color="#f39c12",
-                       annotation_text=f"Méd = {serie.median():.3f}",
-                       annotation_position="top left")
-        fig2.update_layout(
-            title="📊 Distribution des valeurs",
-            xaxis_title=param_label, yaxis_title="Fréquence",
-            height=380, showlegend=False
-        )
-        st.plotly_chart(fig2, use_container_width=True,
-                        key=f"fiab_{tab_prefix}_fig_histo")
+# =============================================================================
+# SECTION — ANALYSE DÉTAILLÉE (histogramme + boxplot + KDE + stats)
+# IMPORTANT : utilise TOUTES les données (sans filtre de plage)
+# =============================================================================
 
-    with col_g3:
-        fig3 = go.Figure()
-        fig3.add_trace(go.Box(
+def render_analyse_detaillee(df_complet: pd.DataFrame, parametre: str,
+                              param_label: str, prefix: str):
+    """
+    Affiche l'analyse statistique complète d'un paramètre sur TOUTES les données
+    disponibles (sans filtre de plage de valeurs).
+
+    Args:
+        df_complet : DataFrame COMPLET de l'équipement/point de mesure
+                     (sans aucun filtre de plage appliqué)
+        parametre  : clé de la colonne (ex. "vitesse_rpm")
+        param_label: label humain (ex. "Vitesse (RPM)")
+        prefix     : préfixe unique pour les keys Plotly (ex. "vitesse_rpm")
+    """
+    serie = df_complet[parametre].dropna()
+    if serie.empty:
+        st.warning(f"⚠️ Aucune donnée pour {param_label}.")
+        return
+
+    # ── Tableau de statistiques ───────────────────────────────────────────────
+    rms_val = float(np.sqrt(np.mean(serie ** 2)))
+    stats   = {
+        "Moyenne":           float(serie.mean()),
+        "Médiane":           float(serie.median()),
+        "Min":               float(serie.min()),
+        "Max":               float(serie.max()),
+        "Écart-type (σ)":    float(serie.std()),
+        "Variance (σ²)":     float(serie.var()),
+        "RMS":               rms_val,
+        "P25 (Q1)":          float(serie.quantile(0.25)),
+        "P75 (Q3)":          float(serie.quantile(0.75)),
+        "Nombre de mesures": len(serie),
+    }
+    col_stat, col_box = st.columns([1, 1])
+
+    with col_stat:
+        st.markdown(f"**Statistiques — {param_label}** *(toutes données)*")
+        df_s = pd.DataFrame([
+            {"Indicateur": k,
+             "Valeur": f"{v:.4f}" if isinstance(v, float) else str(v)}
+            for k, v in stats.items()
+        ])
+        st.dataframe(df_s, use_container_width=True, hide_index=True)
+
+    with col_box:
+        fig_box = go.Figure()
+        fig_box.add_trace(go.Box(
             y=serie, boxpoints="outliers",
             marker_color="#9b59b6", line_color="#8e44ad",
             name=param_label, fillcolor="rgba(155,89,182,0.2)"
         ))
-        fig3.update_layout(
-            title="📦 Boîte à moustaches",
-            yaxis_title=param_label, height=380, showlegend=False
+        fig_box.update_layout(
+            title=f"📦 Boxplot — {param_label}",
+            yaxis_title=param_label, height=320, showlegend=False
         )
-        st.plotly_chart(fig3, use_container_width=True,
-                        key=f"fiab_{tab_prefix}_fig_box")
+        st.plotly_chart(fig_box, use_container_width=True,
+                        key=f"fiab_detail_{prefix}_box")
 
-    # ── Fig 4 : Densité KDE (optionnel — scipy requis) ────────────────────────
+    # ── Histogramme ───────────────────────────────────────────────────────────
+    fig_histo = go.Figure()
+    fig_histo.add_trace(go.Histogram(
+        x=serie, nbinsx=30,
+        marker_color=COULEURS_PARAMETRES.get(parametre, "#3498db"),
+        marker_line=dict(color="#2980b9", width=1),
+        opacity=0.85, name=param_label
+    ))
+    fig_histo.add_vline(x=float(serie.mean()), line_dash="dash", line_color="#e74c3c",
+                        annotation_text=f"Moy={serie.mean():.3f}",
+                        annotation_position="top right")
+    fig_histo.add_vline(x=float(serie.median()), line_dash="dot", line_color="#f39c12",
+                        annotation_text=f"Méd={serie.median():.3f}",
+                        annotation_position="top left")
+    fig_histo.update_layout(
+        title=f"📊 Distribution — {param_label}",
+        xaxis_title=param_label, yaxis_title="Fréquence",
+        height=320, showlegend=False
+    )
+    st.plotly_chart(fig_histo, use_container_width=True,
+                    key=f"fiab_detail_{prefix}_histo")
+
+    # ── Densité KDE (optionnel — scipy) ──────────────────────────────────────
     try:
         from scipy.stats import gaussian_kde  # type: ignore
         kde   = gaussian_kde(serie)
-        x_kde = np.linspace(serie.min(), serie.max(), 300)
-        fig4  = go.Figure()
-        fig4.add_trace(go.Scatter(
+        x_kde = np.linspace(float(serie.min()), float(serie.max()), 300)
+        fig_kde = go.Figure()
+        fig_kde.add_trace(go.Scatter(
             x=x_kde, y=kde(x_kde),
             fill="tozeroy", fillcolor="rgba(46,204,113,0.2)",
             line=dict(color="#2ecc71", width=2.5), name="Densité KDE"
         ))
-        fig4.add_vline(x=serie.mean(), line_dash="dash", line_color="#e74c3c",
-                       annotation_text="Moyenne", annotation_position="top right")
-        fig4.update_layout(
-            title="📈 Densité de probabilité (KDE)",
-            xaxis_title=param_label, yaxis_title="Densité", height=360
+        fig_kde.add_vline(x=float(serie.mean()), line_dash="dash",
+                          line_color="#e74c3c",
+                          annotation_text="Moyenne",
+                          annotation_position="top right")
+        fig_kde.update_layout(
+            title=f"📈 Densité de probabilité (KDE) — {param_label}",
+            xaxis_title=param_label, yaxis_title="Densité", height=320
         )
-        st.plotly_chart(fig4, use_container_width=True,
-                        key=f"fiab_{tab_prefix}_fig_kde")
+        st.plotly_chart(fig_kde, use_container_width=True,
+                        key=f"fiab_detail_{prefix}_kde")
     except Exception:
-        pass  # scipy absent ou données insuffisantes → graphique ignoré silencieusement
+        pass  # scipy absent → ignoré silencieusement
 
 
 # =============================================================================
-# SECTION — STATISTIQUES DESCRIPTIVES
+# SECTION — STATISTIQUES DESCRIPTIVES (onglet 3)
 # =============================================================================
 
 def render_statistiques(df: pd.DataFrame, parametre: str, param_label: str):
-    """Tableau de statistiques descriptives du paramètre."""
+    """Tableau de statistiques descriptives du paramètre (onglet Stats)."""
     serie = df[parametre].dropna()
     if serie.empty:
         st.warning("⚠️ Aucune donnée disponible pour ce paramètre.")
         return
 
-    rms_val = np.sqrt(np.mean(serie ** 2))
+    rms_val = float(np.sqrt(np.mean(serie ** 2)))
     stats   = {
-        "Moyenne":           serie.mean(),
-        "Médiane":           serie.median(),
-        "Min":               serie.min(),
-        "Max":               serie.max(),
-        "Écart-type (σ)":    serie.std(),
-        "Variance (σ²)":     serie.var(),
+        "Moyenne":           float(serie.mean()),
+        "Médiane":           float(serie.median()),
+        "Min":               float(serie.min()),
+        "Max":               float(serie.max()),
+        "Écart-type (σ)":    float(serie.std()),
+        "Variance (σ²)":     float(serie.var()),
         "RMS":               rms_val,
-        "P10":               serie.quantile(0.10),
-        "P25 (Q1)":          serie.quantile(0.25),
-        "P75 (Q3)":          serie.quantile(0.75),
-        "P90":               serie.quantile(0.90),
-        "Plage (max−min)":   serie.max() - serie.min(),
+        "P10":               float(serie.quantile(0.10)),
+        "P25 (Q1)":          float(serie.quantile(0.25)),
+        "P75 (Q3)":          float(serie.quantile(0.75)),
+        "P90":               float(serie.quantile(0.90)),
+        "Plage (max−min)":   float(serie.max() - serie.min()),
         "Nombre de mesures": len(serie),
     }
     df_stats = pd.DataFrame([
@@ -573,29 +606,34 @@ def render_statistiques(df: pd.DataFrame, parametre: str, param_label: str):
 
 
 # =============================================================================
-# SECTION — EXPORTS CSV / EXCEL
+# SECTION — EXPORTS CSV / EXCEL  (inchangé)
 # =============================================================================
 
 def render_exports(df: pd.DataFrame, parametre: str, param_label: str,
                    resultats: dict, intervalles: list,
                    id_equip: str, point_mesure: str):
-    """Boutons d'export CSV et Excel."""
+    """Boutons d'export CSV et Excel du rapport MTBF."""
     st.markdown("#### 📤 Exports")
     col_csv, col_xlsx = st.columns(2)
 
-    # ── CSV ───────────────────────────────────────────────────────────────────
     with col_csv:
-        df_exp = df[["date", "id_equipement", "point_mesure", parametre]].copy()
+        # Exporte toutes les colonnes variables disponibles
+        cols_exp = ["date", "id_equipement", "point_mesure"] + [
+            c for c in VARIABLES_DISPONIBLES.keys() if c in df.columns
+        ]
+        df_exp = df[cols_exp].copy()
         df_exp["date"] = pd.to_datetime(df_exp["date"]).dt.strftime("%d/%m/%Y")
         st.download_button(
             label="📥 Export CSV (données)",
             data=df_exp.to_csv(index=False, sep=";").encode("utf-8-sig"),
-            file_name=f"fiabilite_{id_equip}_{parametre}_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            file_name=(
+                f"fiabilite_{id_equip}_{parametre}_"
+                f"{datetime.now().strftime('%Y%m%d_%H%M')}.csv"
+            ),
             mime="text/csv",
             use_container_width=True
         )
 
-    # ── Excel ─────────────────────────────────────────────────────────────────
     with col_xlsx:
         try:
             import openpyxl
@@ -615,9 +653,10 @@ def render_exports(df: pd.DataFrame, parametre: str, param_label: str,
             # Feuille 1 : Résumé
             ws = wb.active
             ws.title = "Résumé Fiabilité"
-            ws.cell(row=1, column=1,
-                    value=f"Rapport de Fiabilité — {id_equip} | {point_mesure} | {param_label}"
-                    ).font = Font(bold=True, size=14, color="1A5276")
+            ws.cell(
+                row=1, column=1,
+                value=f"Rapport de Fiabilité — {id_equip} | {point_mesure} | {param_label}"
+            ).font = Font(bold=True, size=14, color="1A5276")
             ws.cell(row=2, column=1,
                     value=f"Généré le {datetime.now().strftime('%d/%m/%Y %H:%M')}")
             ws.merge_cells("A1:D1")
@@ -625,18 +664,21 @@ def render_exports(df: pd.DataFrame, parametre: str, param_label: str,
                 ("Équipement",   id_equip),
                 ("Point de mesure", point_mesure),
                 ("Paramètre",    param_label),
-                ("Temps total fonctionnement (jours)",
+                ("Temps total (jours)",
                  round(resultats.get("temps_total_jours", 0), 1)),
-                ("Temps total fonctionnement (heures)",
+                ("Temps total (heures)",
                  round(resultats.get("temps_total_heures", 0), 0)),
                 ("Nombre de défaillances",
                  resultats.get("nombre_pannes", "—")),
                 ("MTBF (jours)",
-                 round(resultats["mtbf_jours"], 2) if resultats.get("mtbf_jours") else "—"),
+                 round(resultats["mtbf_jours"], 2)
+                 if resultats.get("mtbf_jours") else "—"),
                 ("MTBF (heures)",
-                 round(resultats["mtbf_heures"], 1) if resultats.get("mtbf_heures") else "—"),
+                 round(resultats["mtbf_heures"], 1)
+                 if resultats.get("mtbf_heures") else "—"),
                 ("Taux λ (pannes/h)",
-                 f"{resultats['lambda']:.4e}" if resultats.get("lambda") else "—"),
+                 f"{resultats['lambda']:.4e}"
+                 if resultats.get("lambda") else "—"),
             ], start=4):
                 c1 = ws.cell(row=i, column=1, value=lbl)
                 c2 = ws.cell(row=i, column=2, value=val)
@@ -647,45 +689,62 @@ def render_exports(df: pd.DataFrame, parametre: str, param_label: str,
 
             # Feuille 2 : Intervalles
             ws2 = wb.create_sheet("Intervalles")
-            for j, h in enumerate(["N°", "Date début", "Date fin",
-                                    "Durée (jours)", "Durée (mois)", "Durée (années)"], 1):
+            for j, h in enumerate(
+                ["N°", "Date début", "Date fin",
+                 "Durée (jours)", "Durée (mois)", "Durée (années)"], 1
+            ):
                 c = ws2.cell(row=1, column=j, value=h)
                 c.fill = hfill; c.font = hfont
                 c.alignment = Alignment(horizontal="center"); c.border = border
             for i, iv in enumerate(intervalles, 2):
                 d = calculer_duree_jours(iv["debut"], iv["fin"])
                 for j, val in enumerate(
-                    [i-1, iv["debut"].strftime("%d/%m/%Y"), iv["fin"].strftime("%d/%m/%Y"),
-                     d, round(d/30.44, 1), round(d/365.25, 2)], 1
+                    [i - 1, iv["debut"].strftime("%d/%m/%Y"),
+                     iv["fin"].strftime("%d/%m/%Y"),
+                     d, round(d / 30.44, 1), round(d / 365.25, 2)], 1
                 ):
                     c = ws2.cell(row=i, column=j, value=val)
-                    c.border = border; c.alignment = Alignment(horizontal="center")
+                    c.border = border
+                    c.alignment = Alignment(horizontal="center")
             for j in range(1, 7):
                 ws2.column_dimensions[get_column_letter(j)].width = 16
 
-            # Feuille 3 : Données brutes
+            # Feuille 3 : Données
             ws3   = wb.create_sheet("Données")
-            cols3 = ["date", "id_equipement", "point_mesure", parametre]
+            cols3 = ["date", "id_equipement", "point_mesure"] + [
+                c for c in VARIABLES_DISPONIBLES.keys() if c in df.columns
+            ]
             for j, h in enumerate(cols3, 1):
                 c = ws3.cell(row=1, column=j, value=h)
                 c.fill = hfill; c.font = hfont; c.border = border
             for i, (_, row) in enumerate(df[cols3].iterrows(), 2):
-                ws3.cell(row=i, column=1,
-                         value=pd.to_datetime(row["date"]).strftime("%d/%m/%Y")).border = border
+                ws3.cell(
+                    row=i, column=1,
+                    value=pd.to_datetime(row["date"]).strftime("%d/%m/%Y")
+                ).border = border
                 ws3.cell(row=i, column=2, value=row["id_equipement"]).border = border
                 ws3.cell(row=i, column=3, value=row["point_mesure"]).border = border
-                ws3.cell(row=i, column=4,
-                         value=float(row[parametre]) if pd.notna(row[parametre]) else None
-                         ).border = border
-            for j in range(1, 5):
-                ws3.column_dimensions[get_column_letter(j)].width = 20
+                for jj, col in enumerate(cols3[3:], 4):
+                    v = row[col] if col in row.index else None
+                    ws3.cell(
+                        row=i, column=jj,
+                        value=float(v) if pd.notna(v) else None
+                    ).border = border
+            for j in range(1, len(cols3) + 1):
+                ws3.column_dimensions[get_column_letter(j)].width = 18
 
             wb.save(buf); buf.seek(0)
             st.download_button(
                 label="📥 Export Excel (rapport)",
                 data=buf,
-                file_name=f"rapport_fiabilite_{id_equip}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                file_name=(
+                    f"rapport_fiabilite_{id_equip}_"
+                    f"{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+                ),
+                mime=(
+                    "application/vnd.openxmlformats-"
+                    "officedocument.spreadsheetml.sheet"
+                ),
                 use_container_width=True
             )
         except ImportError:
@@ -693,33 +752,34 @@ def render_exports(df: pd.DataFrame, parametre: str, param_label: str,
 
 
 # =============================================================================
-# ONGLET 1 — CALCUL MTBF & FIABILITÉ
+# ONGLET 1 — CALCUL MTBF & FIABILITÉ  (inchangé dans sa logique)
 # =============================================================================
 
 def render_tab_mtbf():
     """
     Onglet MTBF & Fiabilité.
-    Lit les données depuis session_state (filtres globaux).
-
-    Nouveautés :
-      - date_min dynamique : calculée à partir de MIN(date) dans suivi_equipements
-        pour l'équipement sélectionné → passée à render_intervalles()
-      - choix d'unité pour R(t) : heures ou jours (1 jour = 24 heures)
+    - Lit département/équipement/point_mesure depuis session_state.
+    - date_min dynamique = MIN(date) dans suivi_equipements pour l'équipement.
+    - Choix d'unité pour R(t) : heures ou jours.
+    - N'utilise PLUS le filtre "paramètre" (supprimé des filtres globaux).
+    - Pour l'export, utilise le premier paramètre disponible comme référence.
     """
     if not st.session_state.get("fiab_selection_ok", False):
-        st.info("ℹ️ Sélectionnez un équipement et un paramètre dans les filtres ci-dessus.")
+        st.info("ℹ️ Sélectionnez un équipement dans les filtres ci-dessus.")
         return
 
-    df_filtered  = st.session_state["fiab_df_filtered"]
-    id_equip     = st.session_state["fiab_equipement"]
-    point_mesure = st.session_state["fiab_point_mesure"]
-    parametre    = st.session_state["fiab_parametre"]
-    param_label  = st.session_state["fiab_param_label"]
+    df_filtered   = st.session_state["fiab_df_filtered"]
+    id_equip      = st.session_state["fiab_equipement"]
+    point_mesure  = st.session_state["fiab_point_mesure"]
+    cols_variables = st.session_state.get("fiab_cols_variables", [])
 
-    # ── Date min dynamique : première mesure de l'équipement ─────────────────
-    # On récupère le df_suivi complet depuis session_state (déjà chargé dans render())
+    # Paramètre de référence pour l'export (premier disponible)
+    param_ref   = cols_variables[0] if cols_variables else "vitesse_rpm"
+    label_ref   = VARIABLES_DISPONIBLES.get(param_ref, param_ref)
+
+    # Date min dynamique
     df_suivi_global = st.session_state.get("fiab_df_suivi_global", pd.DataFrame())
-    date_min = _get_date_min_equipement(df_suivi_global, id_equip)
+    date_min        = _get_date_min_equipement(df_suivi_global, id_equip)
 
     # ── Intervalles ───────────────────────────────────────────────────────────
     with st.container(border=True):
@@ -736,7 +796,7 @@ def render_tab_mtbf():
     if resultats and resultats.get("erreur"):
         st.warning(f"⚠️ {resultats['erreur']}")
 
-    # ── Saisie t pour R(t) + choix d'unité ───────────────────────────────────
+    # ── Saisie t + unité pour R(t) ────────────────────────────────────────────
     with st.container(border=True):
         st.subheader("🎯 Calcul de la fiabilité R(t)")
 
@@ -748,65 +808,59 @@ def render_tab_mtbf():
                 options=["heures", "jours"],
                 index=0,
                 key="fiab_rt_unite",
-                help="Choisissez l'unité dans laquelle vous saisissez t. "
-                     "Si « jours » est sélectionné, la conversion t × 24 est "
-                     "appliquée automatiquement avant le calcul."
+                help=(
+                    "Si « jours » est sélectionné, "
+                    "la conversion t × 24 est appliquée avant le calcul. "
+                    "λ reste toujours en pannes/heure."
+                )
             )
 
-        # Paramètres d'affichage selon l'unité choisie
         if unite_t == "heures":
-            label_t    = "Temps t (heures)"
-            val_defaut = 720.0      # 30 jours en heures
-            step_t     = 24.0
-            max_t      = 100_000.0
+            label_t   = "Temps t (heures)"
+            val_def   = 720.0
+            step_t    = 24.0
+            max_t     = 100_000.0
         else:
-            label_t    = "Temps t (jours)"
-            val_defaut = 30.0
-            step_t     = 1.0
-            max_t      = 4_000.0   # ≈ 11 ans en jours
+            label_t   = "Temps t (jours)"
+            val_def   = 30.0
+            step_t    = 1.0
+            max_t     = 4_000.0
 
         with col_t:
             t_saisi = st.number_input(
                 label_t,
-                min_value=1.0,
-                max_value=max_t,
-                value=val_defaut,
-                step=step_t,
+                min_value=1.0, max_value=max_t,
+                value=val_def, step=step_t,
                 key="fiab_t_saisi",
-                help=(
-                    "Durée pour laquelle on calcule R(t). "
-                    "Les calculs internes sont toujours en heures "
-                    "(λ en pannes/heure)."
-                )
+                help="Durée pour laquelle on calcule R(t)."
             )
 
-        # Conversion en heures pour tous les calculs (λ est en pannes/heure)
-        if unite_t == "jours":
-            t_heures = t_saisi * 24.0
-            label_t_display = f"{t_saisi:.0f} jours ({t_heures:.0f}h)"
-        else:
-            t_heures        = t_saisi
-            label_t_display = f"{t_heures:.0f}h"
+        t_heures        = t_saisi * 24.0 if unite_t == "jours" else t_saisi
+        label_t_display = (
+            f"{t_saisi:.0f} jours ({t_heures:.0f}h)"
+            if unite_t == "jours"
+            else f"{t_heures:.0f}h"
+        )
 
         if resultats and not resultats.get("erreur") and resultats.get("lambda"):
-            r_t       = fiabilite_rt(resultats["lambda"], t_heures)
+            r_t        = fiabilite_rt(resultats["lambda"], t_heures)
             indicateur = couleur_fiabilite(r_t)
             with col_info:
                 st.markdown(f"""
                 <div style="background:#f8f9fa;border-radius:10px;
                             padding:16px;margin-top:8px;">
-                    <span style="font-size:1.05rem;">
-                        {indicateur}&nbsp;
-                        Pour <b>t = {label_t_display}</b>, la probabilité que
-                        l'équipement fonctionne sans défaillance est :
-                    </span><br>
-                    <span style="font-size:2rem;font-weight:800;color:#2980b9;">
-                        R(t) = {r_t * 100:.2f}%
-                    </span><br>
-                    <span style="font-size:0.8rem;color:#888;">
-                        λ = {resultats['lambda']:.4e} pannes/h —
-                        calcul : exp(−{resultats['lambda']:.4e} × {t_heures:.1f})
-                    </span>
+                  <span style="font-size:1.05rem;">
+                    {indicateur}&nbsp;
+                    Pour <b>t = {label_t_display}</b>, la probabilité que
+                    l'équipement fonctionne sans défaillance est :
+                  </span><br>
+                  <span style="font-size:2rem;font-weight:800;color:#2980b9;">
+                    R(t) = {r_t * 100:.2f}%
+                  </span><br>
+                  <span style="font-size:0.8rem;color:#888;">
+                    λ = {resultats['lambda']:.4e} pannes/h —
+                    exp(−{resultats['lambda']:.4e} × {t_heures:.1f})
+                  </span>
                 </div>
                 """, unsafe_allow_html=True)
 
@@ -829,51 +883,73 @@ def render_tab_mtbf():
                         "MTBF",
                         "MTBF (heures)",
                         "Taux de défaillance λ",
-                        f"t saisi",
-                        f"t converti (heures)",
-                        f"Fiabilité R(t)",
+                        "t saisi",
+                        "t converti (heures)",
+                        "Fiabilité R(t)",
                     ],
                     "Valeur": [
                         f"{resultats['temps_total_jours']:.1f} jours",
                         f"{resultats['temps_total_heures']:.0f} h",
                         f"{resultats['nombre_pannes']} panne(s)",
-                        f"{resultats['mtbf_jours']:.1f} jours" if resultats.get("mtbf_jours") else "—",
-                        f"{resultats['mtbf_heures']:.1f} h"    if resultats.get("mtbf_heures") else "—",
-                        f"{lam:.4e} pannes/h"                  if lam else "—",
+                        f"{resultats['mtbf_jours']:.1f} jours"
+                        if resultats.get("mtbf_jours") else "—",
+                        f"{resultats['mtbf_heures']:.1f} h"
+                        if resultats.get("mtbf_heures") else "—",
+                        f"{lam:.4e} pannes/h" if lam else "—",
                         f"{t_saisi:.1f} {unite_t}",
                         f"{t_heures:.1f} h",
-                        f"{fiabilite_rt(lam, t_heures)*100:.2f}%" if lam else "—",
+                        f"{fiabilite_rt(lam, t_heures) * 100:.2f}%" if lam else "—",
                     ]
                 }
-                st.dataframe(pd.DataFrame(recap), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(recap),
+                             use_container_width=True, hide_index=True)
 
             with col_courbe:
                 if resultats.get("lambda") and resultats.get("mtbf_heures"):
-                    render_courbe_fiabilite(resultats["lambda"], resultats["mtbf_heures"])
+                    render_courbe_fiabilite(
+                        resultats["lambda"], resultats["mtbf_heures"]
+                    )
 
         # ── Exports ───────────────────────────────────────────────────────────
         with st.container(border=True):
-            render_exports(df_filtered, parametre, param_label,
-                           resultats, intervalles, id_equip, point_mesure)
+            render_exports(
+                df_filtered, param_ref, label_ref,
+                resultats, intervalles, id_equip, point_mesure
+            )
 
 
 # =============================================================================
-# ONGLET 2 — VISUALISATION DES TENDANCES
+# ONGLET 2 — VISUALISATION DES TENDANCES  (entièrement refactorisé)
+#
+# Nouveau comportement :
+#   1. Filtre temporel (période personnalisée OU N dernières observations)
+#   2. Filtre optionnel par plage de valeurs sur un paramètre de référence
+#      → appliqué sur le DataFrame → filtre TOUTES les tendances
+#   3. Pour chaque paramètre disponible :
+#        - graphique de tendance temporelle
+#        - bouton "📊 Analyse détaillée" → affiche stats/histo/boxplot/KDE
+#          sur TOUTES les données (sans filtre de plage)
 # =============================================================================
 
 def render_tab_tendances():
-    """Lit session_state (filtres globaux) — aucun filtre dupliqué."""
+    """
+    Onglet Visualisation des tendances.
+    Affiche tous les paramètres disponibles en graphiques empilés.
+    """
     if not st.session_state.get("fiab_selection_ok", False):
-        st.info("ℹ️ Sélectionnez un équipement et un paramètre dans les filtres ci-dessus.")
+        st.info("ℹ️ Sélectionnez un équipement dans les filtres ci-dessus.")
         return
 
-    df_base      = st.session_state["fiab_df_filtered"].copy()
-    id_equip     = st.session_state["fiab_equipement"]
-    point_mesure = st.session_state["fiab_point_mesure"]
-    parametre    = st.session_state["fiab_parametre"]
-    param_label  = st.session_state["fiab_param_label"]
+    df_complet    = st.session_state["fiab_df_filtered"].copy()  # données COMPLÈTES
+    id_equip      = st.session_state["fiab_equipement"]
+    point_mesure  = st.session_state["fiab_point_mesure"]
+    cols_variables = st.session_state.get("fiab_cols_variables", [])
 
-    # Options d'affichage
+    if not cols_variables:
+        st.warning("⚠️ Aucun paramètre vibratoire disponible pour cet équipement.")
+        return
+
+    # ── 1. Filtre temporel ────────────────────────────────────────────────────
     with st.container(border=True):
         st.subheader("⚙️ Options d'affichage")
         col_o1, col_o2, col_o3 = st.columns(3)
@@ -885,28 +961,28 @@ def render_tab_tendances():
                 horizontal=True, key="fiab_tend_mode"
             )
 
-        df_plot = df_base.copy()
+        df_temp = df_complet.copy()
 
         if mode == "Période personnalisée":
             with col_o2:
                 d1 = st.date_input(
                     "Date début",
-                    value=df_base["date"].min().date(),
-                    min_value=df_base["date"].min().date(),
-                    max_value=df_base["date"].max().date(),
+                    value=df_complet["date"].min().date(),
+                    min_value=df_complet["date"].min().date(),
+                    max_value=df_complet["date"].max().date(),
                     key="fiab_tend_d1"
                 )
             with col_o3:
                 d2 = st.date_input(
                     "Date fin",
-                    value=df_base["date"].max().date(),
-                    min_value=df_base["date"].min().date(),
-                    max_value=df_base["date"].max().date(),
+                    value=df_complet["date"].max().date(),
+                    min_value=df_complet["date"].min().date(),
+                    max_value=df_complet["date"].max().date(),
                     key="fiab_tend_d2"
                 )
-            df_plot = df_plot[
-                (df_plot["date"].dt.date >= d1) &
-                (df_plot["date"].dt.date <= d2)
+            df_temp = df_temp[
+                (df_temp["date"].dt.date >= d1) &
+                (df_temp["date"].dt.date <= d2)
             ]
         else:
             with col_o2:
@@ -915,69 +991,165 @@ def render_tab_tendances():
                     min_value=5, max_value=500, value=22, step=1,
                     key="fiab_tend_n"
                 )
-            df_plot = df_plot.tail(int(n_obs))
+            df_temp = df_temp.tail(int(n_obs))
 
+        # ── 2. Filtre optionnel par plage de valeurs ───────────────────────────
         st.markdown("---")
         activer_filtre = st.toggle(
-            "🔎 Filtrer les valeurs (plage personnalisée)",
+            "🔎 Filtrer par plage de valeurs "
+            "(s'applique à tous les graphiques de tendances)",
             value=False, key="fiab_tend_filtre_val"
         )
-        val_min = val_max = None
-        if activer_filtre and not df_plot.empty:
-            col_v1, col_v2 = st.columns(2)
-            with col_v1:
+
+        df_plot = df_temp.copy()   # sera filtré si activer_filtre = True
+
+        if activer_filtre and not df_temp.empty:
+            col_ref, col_vmin, col_vmax = st.columns(3)
+
+            with col_ref:
+                param_ref_filtre = st.selectbox(
+                    "Paramètre de référence",
+                    options=cols_variables,
+                    format_func=lambda k: VARIABLES_DISPONIBLES.get(k, k),
+                    key="fiab_tend_param_ref"
+                )
+
+            val_serie = df_temp[param_ref_filtre].dropna()
+            with col_vmin:
                 val_min = st.number_input(
                     "Valeur minimum",
-                    value=float(df_plot[parametre].min()),
+                    value=float(val_serie.min()),
                     key="fiab_tend_vmin"
                 )
-            with col_v2:
+            with col_vmax:
                 val_max = st.number_input(
                     "Valeur maximum",
-                    value=float(df_plot[parametre].max()),
+                    value=float(val_serie.max()),
                     key="fiab_tend_vmax"
                 )
 
+            # Appliquer le filtre : garder seulement les lignes
+            # dont param_ref_filtre est dans [val_min, val_max]
+            df_plot = df_temp[
+                (df_temp[param_ref_filtre] >= val_min) &
+                (df_temp[param_ref_filtre] <= val_max)
+            ].copy()
+
+            n_avant  = len(df_temp)
+            n_apres  = len(df_plot)
+            st.caption(
+                f"🔎 Filtre actif sur **{VARIABLES_DISPONIBLES.get(param_ref_filtre, param_ref_filtre)}** "
+                f"entre {val_min:.3f} et {val_max:.3f} — "
+                f"{n_apres} / {n_avant} lignes conservées."
+            )
+
     if df_plot.empty:
-        st.warning("⚠️ Aucune donnée pour cette période.")
+        st.warning("⚠️ Aucune donnée après filtrage. Ajustez les critères.")
         return
 
-    with st.container(border=True):
-        st.subheader(f"📈 Tendances — {id_equip} | {point_mesure} | {param_label}")
-        render_graphiques_analyse(
-            df_plot, parametre, param_label, id_equip, point_mesure,
-            val_min=val_min, val_max=val_max,
-            tab_prefix="tend"   # keys uniques : fiab_tend_fig_*
-        )
+    # ── 3. Graphiques de tendances — un par paramètre ────────────────────────
+    st.markdown("---")
+
+    for parametre in cols_variables:
+        param_label = VARIABLES_DISPONIBLES.get(parametre, parametre)
+        df_param    = df_plot[["date", parametre]].dropna().sort_values("date")
+
+        if df_param.empty:
+            st.info(f"ℹ️ Aucune donnée pour {param_label} avec le filtre actuel.")
+            continue
+
+        with st.container(border=True):
+            # Graphique de tendance
+            fig = _fig_tendance(df_param, parametre, param_label, id_equip, point_mesure)
+            st.plotly_chart(
+                fig, use_container_width=True,
+                key=f"fiab_tend_graph_{parametre}"
+            )
+
+            # Bouton "Analyse détaillée" — utilise df_complet (toutes données, sans filtre)
+            key_btn     = f"fiab_tend_btn_{parametre}"
+            key_visible = f"fiab_tend_show_{parametre}"
+
+            if key_visible not in st.session_state:
+                st.session_state[key_visible] = False
+
+            col_btn, col_info = st.columns([1, 4])
+            with col_btn:
+                if st.button(
+                    "📊 Analyse détaillée",
+                    key=key_btn,
+                    use_container_width=True,
+                    help=(
+                        "Affiche histogramme, boxplot et densité KDE "
+                        "sur TOUTES les données disponibles "
+                        "(sans filtre de plage de valeurs)."
+                    )
+                ):
+                    st.session_state[key_visible] = not st.session_state[key_visible]
+
+            with col_info:
+                if st.session_state[key_visible]:
+                    st.caption(
+                        f"📌 Les statistiques ci-dessous utilisent **toutes les données** "
+                        f"de {param_label} ({len(df_complet[parametre].dropna())} mesures), "
+                        f"indépendamment du filtre de plage."
+                    )
+
+            # Panneau détaillé (affiché ou masqué selon l'état du bouton)
+            if st.session_state[key_visible]:
+                df_complet_param = df_complet[["date", parametre]].dropna()
+                render_analyse_detaillee(
+                    df_complet_param, parametre, param_label,
+                    prefix=parametre   # ex. "vitesse_rpm" → keys uniques garanties
+                )
 
 
 # =============================================================================
-# ONGLET 3 — STATISTIQUES DESCRIPTIVES
+# ONGLET 3 — STATISTIQUES DESCRIPTIVES  (inchangé dans sa logique)
+# Ajoute maintenant un selectbox paramètre LOCAL à l'onglet
+# (car le paramètre n'est plus dans les filtres globaux)
 # =============================================================================
 
 def render_tab_stats():
-    """Lit session_state (filtres globaux) — aucun filtre dupliqué."""
+    """
+    Onglet Statistiques descriptives.
+    Permet de choisir le paramètre localement (selectbox dans l'onglet).
+    """
     if not st.session_state.get("fiab_selection_ok", False):
-        st.info("ℹ️ Sélectionnez un équipement et un paramètre dans les filtres ci-dessus.")
+        st.info("ℹ️ Sélectionnez un équipement dans les filtres ci-dessus.")
         return
 
-    df_base      = st.session_state["fiab_df_filtered"].copy()
-    id_equip     = st.session_state["fiab_equipement"]
-    point_mesure = st.session_state["fiab_point_mesure"]
-    parametre    = st.session_state["fiab_parametre"]
-    param_label  = st.session_state["fiab_param_label"]
+    df_base       = st.session_state["fiab_df_filtered"].copy()
+    id_equip      = st.session_state["fiab_equipement"]
+    point_mesure  = st.session_state["fiab_point_mesure"]
+    cols_variables = st.session_state.get("fiab_cols_variables", [])
 
-    # Filtre temporel
+    if not cols_variables:
+        st.warning("⚠️ Aucun paramètre vibratoire disponible pour cet équipement.")
+        return
+
+    # ── Sélection locale du paramètre ────────────────────────────────────────
     with st.container(border=True):
-        st.subheader("⚙️ Filtre temporel")
-        col_s1, col_s2 = st.columns(2)
-        with col_s1:
+        st.subheader("⚙️ Paramètre et période")
+        col_p, col_d1, col_d2 = st.columns(3)
+
+        with col_p:
+            parametre = st.selectbox(
+                "Paramètre",
+                options=cols_variables,
+                format_func=lambda k: VARIABLES_DISPONIBLES.get(k, k),
+                key="fiab_stat_parametre"
+            )
+            param_label = VARIABLES_DISPONIBLES.get(parametre, parametre)
+
+        df_base["date"] = pd.to_datetime(df_base["date"], errors="coerce")
+        with col_d1:
             ds1 = st.date_input(
                 "Date début",
                 value=df_base["date"].min().date(),
                 key="fiab_stat_d1"
             )
-        with col_s2:
+        with col_d2:
             ds2 = st.date_input(
                 "Date fin",
                 value=df_base["date"].max().date(),
@@ -993,12 +1165,15 @@ def render_tab_stats():
         st.warning("⚠️ Aucune donnée pour cette période.")
         return
 
+    # ── Statistiques ──────────────────────────────────────────────────────────
     with st.container(border=True):
         st.subheader(f"📋 Statistiques descriptives — {param_label}")
         render_statistiques(df_stat, parametre, param_label)
 
+    # ── Graphiques ────────────────────────────────────────────────────────────
     with st.container(border=True):
-        st.subheader("📊 Visualisations statistiques")
+        st.subheader(f"📊 Visualisations — {param_label}")
+
         activer_filtre = st.toggle(
             "🔎 Filtrer les valeurs",
             value=False, key="fiab_stat_filtre"
@@ -1018,10 +1193,33 @@ def render_tab_stats():
                     value=float(df_stat[parametre].max()),
                     key="fiab_stat_vmax"
                 )
-        render_graphiques_analyse(
-            df_stat, parametre, param_label, id_equip, point_mesure,
-            val_min=val_min_s, val_max=val_max_s,
-            tab_prefix="stat"   # keys uniques : fiab_stat_fig_*
+
+        # Données à utiliser pour les graphiques de l'onglet Stats
+        if val_min_s is not None and val_max_s is not None:
+            df_viz = df_stat[
+                (df_stat[parametre] >= val_min_s) &
+                (df_stat[parametre] <= val_max_s)
+            ]
+        else:
+            df_viz = df_stat
+
+        if df_viz.empty:
+            st.warning("⚠️ Aucune donnée après filtrage.")
+            return
+
+        # Graphique tendance
+        df_param_viz = df_viz[["date", parametre]].dropna().sort_values("date")
+        if not df_param_viz.empty:
+            fig_t = _fig_tendance(
+                df_param_viz, parametre, param_label, id_equip, point_mesure
+            )
+            st.plotly_chart(fig_t, use_container_width=True,
+                            key="fiab_stat_fig_tend")
+
+        # Analyse détaillée (histo + box + KDE)
+        render_analyse_detaillee(
+            df_viz, parametre, param_label,
+            prefix="stat"
         )
 
 
@@ -1033,17 +1231,20 @@ def render():
     """
     Structure finale :
 
-        Titre  : 🔧 Analyse de Fiabilité
-        ┌──────────────────────────────────┐
-        │  Filtres globaux (session_state) │
-        │  Dept | Équip | Point | Param    │
-        └──────────────────────────────────┘
+        🔧 Analyse de Fiabilité
+        ┌─────────────────────────────────┐
+        │  Filtres globaux (3 colonnes)   │
+        │  Dept | Équipement | Pt mesure  │
+        └─────────────────────────────────┘
         ┌──────────────────────────────────────────────────────┐
-        │  [ ⚙️ Calcul MTBF | 📈 Tendances | 📊 Statistiques ] │
+        │  [⚙️ Calcul MTBF | 📈 Tendances | 📊 Statistiques]  │
         └──────────────────────────────────────────────────────┘
     """
     st.header("🔧 Analyse de Fiabilité")
-    st.caption("Calcul du MTBF, taux de défaillance, courbes R(t) et statistiques industrielles")
+    st.caption(
+        "Calcul du MTBF, taux de défaillance, "
+        "courbes R(t) et statistiques industrielles"
+    )
 
     df_equipements = charger_equipements()
     df_suivi       = charger_suivi()
@@ -1052,16 +1253,15 @@ def render():
         st.error("⚠️ Données insuffisantes. Vérifiez la connexion à la base de données.")
         return
 
-    # Stocker df_suivi complet en session_state pour que render_tab_mtbf()
-    # puisse calculer la date min dynamique sans re-charger depuis Supabase.
+    # Stocker df_suivi complet pour calcul date_min dans render_tab_mtbf()
     st.session_state["fiab_df_suivi_global"] = df_suivi
 
-    # Filtres globaux — une seule fois — résultats dans session_state
+    # Filtres globaux (3 colonnes — sans paramètre)
     render_filtres_globaux(df_equipements, df_suivi)
 
     st.markdown("---")
 
-    # Onglets — lisent session_state, ne répètent pas les filtres
+    # Onglets
     tab_mtbf, tab_tend, tab_stats = st.tabs([
         "⚙️ Calcul MTBF & Fiabilité",
         "📈 Visualisation des tendances",
